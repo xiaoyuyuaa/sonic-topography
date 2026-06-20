@@ -1,0 +1,282 @@
+{
+	"audio" : 
+	{
+		"enabled" : true
+	},
+	"contentrating" : "Everyone",
+	"description" : "3D音频响应地形可视化壁纸，带有波纹、流星和霓虹灯光效果。",
+	"file" : "index.html",
+	"general" : 
+	{
+		"properties" : 
+		{
+			"audioIntensity" : 
+			{
+				"index" : 1,
+				"max" : 2.5,
+				"min" : 0.3,
+				"order" : 101,
+				"step" : 0.1,
+				"text" : "音频响应强度",
+				"type" : "slider",
+				"value" : 1
+			},
+			"autoRotateSpeed" : 
+			{
+				"index" : 4,
+				"max" : 2,
+				"min" : 0,
+				"order" : 104,
+				"step" : 0.1,
+				"text" : "自动旋转速度",
+				"type" : "slider",
+				"value" : 0
+			},
+			"cameraAngleX" : 
+			{
+				"index" : 6,
+				"max" : 360,
+				"min" : 0,
+				"order" : 106,
+				"step" : 5,
+				"text" : "水平角度",
+				"type" : "slider",
+				"value" : 120
+			},
+			"cameraAngleY" : 
+			{
+				"index" : 7,
+				"max" : 70,
+				"min" : 10,
+				"order" : 107,
+				"step" : 5,
+				"text" : "垂直仰角",
+				"type" : "slider",
+				"value" : 25
+			},
+			"cameraDistance" : 
+			{
+				"index" : 5,
+				"max" : 100,
+				"min" : 20,
+				"order" : 105,
+				"step" : 5,
+				"text" : "视角距离",
+				"type" : "slider",
+				"value" : 85
+			},
+			"controllerSize" : 
+			{
+				"index" : 18,
+				"options" : 
+				[
+					{
+						"label" : "小 (紧凑)",
+						"value" : "small"
+					},
+					{
+						"label" : "中 (均衡)",
+						"value" : "medium"
+					},
+					{
+						"label" : "大 (醒目)",
+						"value" : "large"
+					}
+				],
+				"order" : 118,
+				"text" : "控制器尺寸",
+				"type" : "combo",
+				"value" : "large"
+			},
+			"gridSize" : 
+			{
+				"index" : 19,
+				"options" : 
+				[
+					{ "label" : "低 (80×80)", "value" : 80 },
+					{ "label" : "中低 (120×120)", "value" : 120 },
+					{ "label" : "标准 (160×160)", "value" : 160 },
+					{ "label" : "中高 (200×200)", "value" : 200 },
+					{ "label" : "高 (240×240)", "value" : 240 },
+					{ "label" : "超高 (320×320)", "value" : 320 }
+				],
+				"order" : 119,
+				"text" : "渲染精度",
+				"type" : "combo",
+				"value" : 160
+			},
+			"idleWaveEnabled" : 
+			{
+				"index" : 3,
+				"order" : 103,
+				"text" : "空闲波浪",
+				"type" : "bool",
+				"value" : true
+			},
+			"meteorEnabled" : 
+			{
+				"index" : 12,
+				"order" : 112,
+				"text" : "启用流星",
+				"type" : "bool",
+				"value" : true
+			},
+			"meteorSensitivity" : 
+			{
+				"index" : 13,
+				"max" : 0.8,
+				"min" : 0.1,
+				"order" : 113,
+				"step" : 0.05,
+				"text" : "流星灵敏度",
+				"type" : "slider",
+				"value" : 0.35
+			},
+			"meteorcooldown" : 
+			{
+				"index" : 14,
+				"max" : 400,
+				"min" : 0,
+				"order" : 114,
+				"text" : "流星冷却 (帧)",
+				"type" : "slider",
+				"value" : 60
+			},
+			"meteorClickEnabled" : 
+			{
+				"index" : 20,
+				"order" : 120,
+				"text" : "闲置点击触发流星",
+				"type" : "bool",
+				"value" : true
+			},
+			"pulseCooldown" : 
+			{
+				"index" : 10,
+				"max" : 200,
+				"min" : 0,
+				"order" : 110,
+				"step" : 5,
+				"text" : "波纹冷却 (帧)",
+				"type" : "slider",
+				"value" : 0
+			},
+			"pulseEnabled" : 
+			{
+				"index" : 8,
+				"order" : 108,
+				"text" : "启用波纹",
+				"type" : "bool",
+				"value" : true
+			},
+			"pulseSensitivity" : 
+			{
+				"index" : 9,
+				"max" : 0.5,
+				"min" : 0.05,
+				"order" : 109,
+				"step" : 0.01,
+				"text" : "波纹灵敏度",
+				"type" : "slider",
+				"value" : 0.2
+			},
+			"responseRange" : 
+			{
+				"index" : 2,
+				"max" : 2,
+				"min" : 0.3,
+				"order" : 102,
+				"step" : 0.1,
+				"text" : "响应范围",
+				"type" : "slider",
+				"value" : 1
+			},
+			"schemecolor" : 
+			{
+				"order" : 0,
+				"text" : "ui_browse_properties_scheme_color",
+				"type" : "color",
+				"value" : "0.3333333333333333 0.0196078431372549 0.3333333333333333"
+			},
+			"showAlbumCover" : 
+			{
+				"index" : 17,
+				"order" : 117,
+				"text" : "显示专辑封面",
+				"type" : "bool",
+				"value" : true
+			},
+			"showPlayerController" : 
+			{
+				"index" : 16,
+				"order" : 116,
+				"text" : "显示播放器控制器",
+				"type" : "bool",
+				"value" : true
+			},
+			"theme" : 
+			{
+				"index" : 0,
+				"options" : 
+				[
+					{
+						"label" : "靛蓝紫",
+						"value" : "nocturnal"
+					},
+					{
+						"label" : "深海蓝",
+						"value" : "ocean-deep"
+					},
+					{
+						"label" : "冰蓝",
+						"value" : "arctic-aurora"
+					},
+					{
+						"label" : "翡翠绿",
+						"value" : "cyber-forest"
+					},
+					{
+						"label" : "暖金黄",
+						"value" : "golden-hour"
+					},
+					{
+						"label" : "琥珀橙",
+						"value" : "ember-fire"
+					},
+					{
+						"label" : "血红",
+						"value" : "crimson-sunset"
+					},
+					{
+						"label" : "珊瑚粉",
+						"value" : "coral-mirage"
+					},
+					{
+						"label" : "霓虹紫粉",
+						"value" : "neon-tokyo"
+					},
+					{
+						"label" : "极简黑白",
+						"value" : "minimal-monochrome"
+					}
+				],
+				"order" : 100,
+				"text" : "颜色主题",
+				"type" : "combo",
+				"value" : "nocturnal"
+			}
+		},
+		"supportsaudioprocessing" : true
+	},
+	"name" : "Sonic Topography",
+	"preview" : "preview.gif",
+	"ratingsex" : "none",
+	"ratingviolence" : "none",
+	"tags" : [ "Sci-Fi" ],
+	"title" : "音域回响",
+	"type" : "web",
+	"version" : 1,
+	"visibility" : "public",
+	"workshopid" : "3747222633",
+	"workshopurl" : "steam://url/CommunityFilePage/3747222633"
+}
