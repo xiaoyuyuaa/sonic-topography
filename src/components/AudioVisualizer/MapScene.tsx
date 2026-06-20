@@ -273,8 +273,10 @@ export const MapScene = forwardRef<MapSceneHandle, MapSceneProps>(({ theme = 'no
     // Pass ripples
     mat.uRipples = ripplesRef.current;
 
-    // Background ambient wave - always enabled (scaled by idleWaveEnabled config)
-    mat.uIdleWave = idleWaveEnabled ? 1.0 : 0.0;
+    // Background ambient wave - dynamic control based on audio state
+    // Audio playing: idle wave = 0, stopped >3s: smooth transition to 1
+    const idleIntensity = engine.getIdleWaveIntensity();
+    mat.uIdleWave = idleWaveEnabled ? idleIntensity : 0.0;
 
     mat.uHalfExtent = halfExtent;
 

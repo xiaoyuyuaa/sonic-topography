@@ -141,12 +141,12 @@ export const MapShaderMaterial = shaderMaterial(
       // 2. Frequency Regions & Displacements with eased animation curves
 
       // Sub-Bass: Center heavy, ultra slow rolling hills, massive block lifts
-      float subRegion = smoothstep(uHalfExtent * 0.50 * range, 0.0, centerDist);
+      float subRegion = smoothstep(uHalfExtent * 0.30 * range, 0.0, centerDist);
       float subLift = easeLift(uSubBass, 6.0) * subRegion;
 
       // Bass: Chunk-based lifts, springy feel
       float bassNoise = snoise(pos2D * 0.1 - vec2(0.0, uTime * 0.2));
-      float bassRegion = smoothstep(uHalfExtent * 0.60 * range, uHalfExtent * 0.06 * range, centerDist + bassNoise * 5.0);
+      float bassRegion = smoothstep(uHalfExtent * 0.42 * range, uHalfExtent * 0.06 * range, centerDist + bassNoise * 5.0);
       float bassRnd = smoothstep(0.0, 1.0, rnd + uDensity * 0.5);
       float bassLift = easeLift(uBass, 5.0) * bassRegion * bassRnd;
 

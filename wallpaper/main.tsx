@@ -18,6 +18,8 @@ interface WallpaperProperties {
   responseRange?: PropertyValue;
   gridSize?: PropertyValue;
   idleWaveEnabled?: PropertyValue;
+  idleWaveDelay?: PropertyValue;
+  idleWaveFadeOut?: PropertyValue;
   autoRotateSpeed?: PropertyValue;
   cameraDistance?: PropertyValue;
   cameraAngleX?: PropertyValue;
@@ -27,7 +29,7 @@ interface WallpaperProperties {
   pulseCooldown?: PropertyValue;
   meteorEnabled?: PropertyValue;
   meteorSensitivity?: PropertyValue;
-  meteorcooldown?: PropertyValue;
+  meteorCooldown?: PropertyValue;
   meteorClickEnabled?: PropertyValue;
   showPlayerController?: PropertyValue;
   showAlbumCover?: PropertyValue;
@@ -43,6 +45,7 @@ function WallpaperApp() {
   const [cameraAngleX, setCameraAngleX] = useState(120);
   const [cameraAngleY, setCameraAngleY] = useState(25);
   const [idleWaveEnabled, setIdleWaveEnabled] = useState(true);
+  const [idleWaveDelay, setIdleWaveDelay] = useState(3);
   const [showPlayerController, setShowPlayerController] = useState(true);
   const [showAlbumCover, setShowAlbumCover] = useState(true);
   const [controllerSize, setControllerSize] = useState<'small' | 'medium' | 'large'>('large');
@@ -74,6 +77,15 @@ function WallpaperApp() {
     if (properties.idleWaveEnabled?.value !== undefined) {
       setIdleWaveEnabled(properties.idleWaveEnabled.value as boolean);
     }
+    if (properties.idleWaveDelay?.value !== undefined) {
+      const delay = properties.idleWaveDelay.value as number;
+      setIdleWaveDelay(delay);
+      engine.setIdleWaveDelay(delay);
+    }
+    if (properties.idleWaveFadeOut?.value !== undefined) {
+      const fadeOut = properties.idleWaveFadeOut.value as number;
+      engine.setIdleFadeOutDuration(fadeOut);
+    }
     if (properties.autoRotateSpeed?.value !== undefined) {
       setAutoRotateSpeed(properties.autoRotateSpeed.value as number);
     }
@@ -101,8 +113,8 @@ function WallpaperApp() {
     if (properties.meteorSensitivity?.value !== undefined) {
       engine.meteorTrigger.sensitivity = properties.meteorSensitivity.value as number;
     }
-    if (properties.meteorcooldown?.value !== undefined) {
-      engine.meteorTrigger.cooldown = properties.meteorcooldown.value as number;
+    if (properties.meteorCooldown?.value !== undefined) {
+      engine.meteorTrigger.cooldown = properties.meteorCooldown.value as number;
     }
     if (properties.showPlayerController?.value !== undefined) {
       setShowPlayerController(properties.showPlayerController.value as boolean);

@@ -86,6 +86,13 @@ export class AudioEngine {
   private fadeTime = 0.5; // seconds
   private visualReleaseUntil = 0;
   private visualReleaseTime = 1.6; // seconds
+  private idleStartTime: number = 0; // 记录音频停止的时间
+  private idleTransitionDuration = 1.0; // 空闲等待时间（秒）
+  private idleFadeOutDuration = 1.0; // 空闲过渡时间（秒）
+  private lastActiveTime: number = 0; // 记录最后一次有音频能量的时间
+  private lastIdleTime: number = 0; // 记录最后一次无音频能量的时间
+  private idleEnergyThreshold = 0.02; // 空闲能量阈值，低于此值认为无音频
+  private currentIdleIntensity: number = 0; // 当前空闲波纹强度（用于平滑过渡）
   
   private beatThreshold = 0.4;
   private beatDecay = 0.95;
@@ -252,6 +259,55 @@ export class AudioEngine {
 
   private beginVisualRelease(seconds = this.visualReleaseTime) {
     this.visualReleaseUntil = performance.now() + seconds * 1000;
+    this.idleStartTime = performance.now(); // 记录空闲开始时间
+  }
+
+  // 计算空闲波纹强度：音频播放时为0，停止超过配置时间后平滑过渡到1
+  // Wallpaper Engine 模式下基于音频能量判断，普通模式基于 isPlaying
+  // 使用 currentIdleIntensity 实现平滑过渡
+  public getIdleWaveIntensity(): number {
+    const now = performance.now();
+    let targetIntensity = 0;
+    
+    // Wallpaper Engine 模式：基于音频能量判断
+    if (this.wallpaperAudioReceived) {
+      const elapsed = (now - this.lastActiveTime) / 1000;
+      if (elapsed >= this.idleTransitionDuration) {
+        targetIntensity = 1;
+      }
+    } else {
+      // 普通模式：基于 isPlaying 状态
+      if (!this.isPlaying && this.idleStartTime !== 0) {
+        const elapsed = (now - this.idleStartTime) / 1000;
+        if (elapsed >= this.idleTransitionDuration) {
+          targetIntensity = 1;
+        }
+      }
+    }
+    
+    // 平滑过渡：根据目标值渐变
+    const fadeSpeed = targetIntensity > this.currentIdleIntensity 
+      ? 1.0 / this.idleFadeOutDuration  // 进入空闲的速度
+      : 3.0 / this.idleFadeOutDuration;  // 退出空闲的速度（更快）
+    
+    const delta = fadeSpeed * 0.016; // 约60fps
+    if (targetIntensity > this.currentIdleIntensity) {
+      this.currentIdleIntensity = Math.min(targetIntensity, this.currentIdleIntensity + delta);
+    } else {
+      this.currentIdleIntensity = Math.max(targetIntensity, this.currentIdleIntensity - delta);
+    }
+    
+    return this.currentIdleIntensity;
+  }
+
+  // 设置空闲波纹等待时间
+  public setIdleWaveDelay(seconds: number) {
+    this.idleTransitionDuration = seconds;
+  }
+
+  // 设置退出空闲过渡时间
+  public setIdleFadeOutDuration(seconds: number) {
+    this.idleFadeOutDuration = seconds;
   }
 
   private prevData: number[] = new Array(512).fill(0);
@@ -441,6 +497,11 @@ export class AudioEngine {
 
     const energy = energySum / binCount;
     
+    // Update last active time when audio energy is detected
+    if (energy > this.idleEnergyThreshold) {
+      this.lastActiveTime = performance.now();
+    }
+    
     // Evaluate triggers directly (no debounce needed)
     this.evaluateTrigger(this.pulseTrigger, fluxPulse);
     this.evaluateTrigger(this.meteorTrigger, fluxMeteor);
@@ -581,6 +642,11 @@ export class AudioEngine {
     }
 
     const energy = energySum / binCount;
+    
+    // Update last active time when audio energy is detected (普通模式)
+    if (this.isPlaying && energy > this.idleEnergyThreshold) {
+      this.lastActiveTime = performance.now();
+    }
     
     // Average amplitudes per band (updated bin counts)
     const subBass = subBassSum / 5;      // 5 bins (expanded)
