@@ -361,8 +361,8 @@ export const MapShaderMaterial = shaderMaterial(
       currentGlow = mix(currentGlow, uRippleColor, normalBlend * 0.85);
       currentGlow = mix(currentGlow, vec3(1.0, 1.0, 1.0), whiteBlend * 0.9);
       
-      // Peak color - 中间凸起峰值颜色（高阈值触发）
-      float peakBlend = pow(vPeakIntensity, 1.5) * uPeakEnabled * uPeakIntensity;
+      // Peak color - 中间凸起峰值颜色
+      float peakBlend = pow(vPeakIntensity, 0.85) * uPeakEnabled * uPeakIntensity;
       currentGlow = mix(currentGlow, uPeakColor, clamp(peakBlend, 0.0, 1.0) * 0.7); // 发光混合 70%
       
       vec3 bodyColor = mix(cBase1, cBase2, vRelativeY * distFade);
