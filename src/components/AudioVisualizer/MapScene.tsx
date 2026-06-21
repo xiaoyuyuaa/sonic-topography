@@ -4,12 +4,12 @@ import * as THREE from 'three';
 import { useRef, useMemo, useCallback, useLayoutEffect, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { MapShaderMaterial } from './CustomShaderMaterial';
 import { engine } from '../../lib/AudioEngine';
-import { themes } from '../../lib/themes';
+import { themes, ThemeColors } from '../../lib/themes';
 
 extend({ MapShaderMaterial });
 
 interface MapSceneProps {
-  theme?: string;
+  theme?: string | ThemeColors; // 支持主题名或混合后的主题颜色对象
   autoRotateSpeed?: number;
   cameraDistance?: number;
   idleWaveEnabled?: boolean;
@@ -18,17 +18,27 @@ interface MapSceneProps {
   cameraAngleX?: number;
   cameraAngleY?: number;
   gridSize?: number;
+  peakColorEnabled?: boolean; // 强调色开关
+  peakColorIntensity?: number; // 强调色强度 (0-2)
 }
 
 export interface MapSceneHandle {
   triggerMeteorAt: (clientX: number, clientY: number) => void;
 }
 
-export const MapScene = forwardRef<MapSceneHandle, MapSceneProps>(({ theme = 'nocturnal', autoRotateSpeed = 0.5, cameraDistance = 50, idleWaveEnabled = true, audioIntensity = 1.0, responseRange = 1.0, cameraAngleX = 45, cameraAngleY = 30, gridSize = 160 }, ref) => {
+export const MapScene = forwardRef<MapSceneHandle, MapSceneProps>(({ theme = 'nocturnal', autoRotateSpeed = 0.5, cameraDistance = 50, idleWaveEnabled = true, audioIntensity = 1.0, responseRange = 1.0, cameraAngleX = 45, cameraAngleY = 30, gridSize = 160, peakColorEnabled = true, peakColorIntensity = 1.0 }, ref) => {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const materialRef = useRef<any>(null);
   const orbitControlsRef = useRef<any>(null);
   const { clock, camera, gl } = useThree();
+  
+  // 获取主题颜色对象
+  const getThemeColors = useCallback((): ThemeColors => {
+    if (typeof theme === 'string') {
+      return themes[theme] || themes['nocturnal'];
+    }
+    return theme;
+  }, [theme]);
   
   const totalRange = 168;
   const spacing = totalRange / gridSize;
@@ -224,10 +234,13 @@ export const MapScene = forwardRef<MapSceneHandle, MapSceneProps>(({ theme = 'no
     if (!materialRef.current) return;
     const mat = materialRef.current;
     const data = engine.getAudioData();
-    const t = themes[theme] || themes['nocturnal'];
+    const t = getThemeColors();
 
-    // Smoothly transition colors
-    const lerpSpeed = 3.0 * delta;
+    // 如果传入的是混合主题对象，直接应用颜色（不再使用 lerp 过渡）
+    // 如果传入的是主题名称，使用 lerp 平滑过渡
+    const isMixedTheme = typeof theme !== 'string';
+    const lerpSpeed = isMixedTheme ? 1.0 : (3.0 * delta);
+    
     mat.uBaseColor1.lerp(t.uBaseColor1, lerpSpeed);
     mat.uBaseColor2.lerp(t.uBaseColor2, lerpSpeed);
     mat.uCoolCore.lerp(t.uCoolCore, lerpSpeed);
@@ -235,7 +248,10 @@ export const MapScene = forwardRef<MapSceneHandle, MapSceneProps>(({ theme = 'no
     mat.uWarmCore.lerp(t.uWarmCore, lerpSpeed);
     mat.uWarmEdge.lerp(t.uWarmEdge, lerpSpeed);
     mat.uRippleColor.lerp(t.uRippleColor, lerpSpeed);
+    mat.uPeakColor.lerp(t.uPeakColor, lerpSpeed);
     mat.uGlowIntensity = THREE.MathUtils.lerp(mat.uGlowIntensity, t.uGlowIntensity, lerpSpeed);
+    mat.uPeakEnabled = peakColorEnabled ? 1.0 : 0.0;
+    mat.uPeakIntensity = peakColorIntensity;
 
     if (fogRef.current) {
         fogRef.current.color.lerp(t.uBaseColor1, lerpSpeed);
@@ -364,7 +380,7 @@ export const MapScene = forwardRef<MapSceneHandle, MapSceneProps>(({ theme = 'no
     updateCameraPosition(cameraAngleX, cameraAngleY, cameraDistance);
   }, [cameraAngleX, cameraAngleY, cameraDistance, updateCameraPosition]);
 
-  const t = themes[theme] || themes['nocturnal'];
+  const t = getThemeColors();
 
   return (
     <>

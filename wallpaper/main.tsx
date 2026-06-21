@@ -1,9 +1,9 @@
-import { StrictMode, useEffect, useState, useRef, useCallback } from 'react';
+import { StrictMode, useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { createRoot } from 'react-dom/client';
 import { Canvas } from '@react-three/fiber';
 import { MapScene } from '../src/components/AudioVisualizer/MapScene';
-import { themes } from '../src/lib/themes';
+import { themes, themeIds, lerpThemes, ThemeColors } from '../src/lib/themes';
 import { engine } from '../src/lib/AudioEngine';
 import '../src/index.css';
 
@@ -34,12 +34,33 @@ interface WallpaperProperties {
   showPlayerController?: PropertyValue;
   showAlbumCover?: PropertyValue;
   controllerSize?: PropertyValue;
+  themeCycleInterval?: PropertyValue;
+}
+
+/* Media Integration 状态接口 */
+interface MediaState {
+  title: string;
+  artist: string;
+  thumbnail: string;
+  primaryColor: string;
+  textColor: string;
+  isPlaying: boolean;
+  position: number;
+  duration: number;
+}
+
+// 扩展 Window 接口
+declare global {
+  interface Window {
+    __mediaState: MediaState & { _callbacks: ((state: MediaState) => void)[] };
+    __notifyMediaChange: () => void;
+  }
 }
 
 function WallpaperApp() {
   const defaultCameraDistance = 85;
 
-  const [themeName, setThemeName] = useState('nocturnal');
+  const [themeMode, setThemeMode] = useState<'cycle' | string>('nocturnal'); // 'cycle' 或具体主题名
   const [autoRotateSpeed, setAutoRotateSpeed] = useState(0);
   const [cameraDistance, setCameraDistance] = useState(defaultCameraDistance);
   const [cameraAngleX, setCameraAngleX] = useState(120);
@@ -52,26 +73,78 @@ function WallpaperApp() {
   const [responseRange, setResponseRange] = useState(1);
   const [gridSize, setGridSize] = useState(160);
   const [meteorClickEnabled, setMeteorClickEnabled] = useState(true);
+  const [peakColorEnabled, setPeakColorEnabled] = useState(true); // 强调色开关
+  const [peakColorIntensity, setPeakColorIntensity] = useState(1.0); // 强调色强度
+  const [themeCycleInterval, setThemeCycleInterval] = useState(60); // 默认60秒
   const mapSceneRef = useRef<any>(null);
+  
+  /* 主题轮询过渡状态 */
+  const [cycleProgress, setCycleProgress] = useState(0); // 0-1 之间的过渡进度
+  const cycleStartRef = useRef<number>(0); // 当前过渡周期的开始时间
+  const currentThemeIndexRef = useRef(0); // 当前主题索引
 
-  /* Wallpaper Engine Media Integration 状态 */
-  const [mediaTitle, setMediaTitle] = useState('');
-  const [mediaArtist, setMediaArtist] = useState('');
-  const [mediaThumbnail, setMediaThumbnail] = useState('');
-  const [primaryColor, setPrimaryColor] = useState('');
-  const [textColor, setTextColor] = useState('');
-  const [isMediaPlaying, setIsMediaPlaying] = useState(false);
-  const [mediaPosition, setMediaPosition] = useState(0);
-  const [mediaDuration, setMediaDuration] = useState(0);
+  /* Wallpaper Engine Media Integration 状态 - 从全局读取初始值 */
+  const getInitialMediaState = () => window.__mediaState || {
+    title: '', artist: '', thumbnail: '', primaryColor: '', textColor: '', isPlaying: false, position: 0, duration: 0
+  };
+  const initialMedia = getInitialMediaState();
 
-  const t = themes[themeName] || themes['nocturnal'];
+  const [mediaTitle, setMediaTitle] = useState(initialMedia.title);
+  const [mediaArtist, setMediaArtist] = useState(initialMedia.artist);
+  const [mediaThumbnail, setMediaThumbnail] = useState(initialMedia.thumbnail);
+  const [primaryColor, setPrimaryColor] = useState(initialMedia.primaryColor);
+  const [textColor, setTextColor] = useState(initialMedia.textColor);
+  const [isMediaPlaying, setIsMediaPlaying] = useState(initialMedia.isPlaying);
+  const [mediaPosition, setMediaPosition] = useState(initialMedia.position);
+  const [mediaDuration, setMediaDuration] = useState(initialMedia.duration);
+
+  /* 订阅 Media Integration 状态更新 */
+  useEffect(() => {
+    if (!window.__mediaState) return;
+    const callback = (state: MediaState) => {
+      setMediaTitle(state.title);
+      setMediaArtist(state.artist);
+      setMediaThumbnail(state.thumbnail);
+      setPrimaryColor(state.primaryColor);
+      setTextColor(state.textColor);
+      setIsMediaPlaying(state.isPlaying);
+      setMediaPosition(state.position);
+      setMediaDuration(state.duration);
+    };
+    window.__mediaState._callbacks.push(callback);
+    return () => {
+      const idx = window.__mediaState._callbacks.indexOf(callback);
+      if (idx > -1) window.__mediaState._callbacks.splice(idx, 1);
+    };
+  }, []);
+
+  /* 计算当前主题（支持混合过渡） */
+  const currentTheme: ThemeColors = useMemo(() => {
+    if (themeMode === 'cycle') {
+      // 轮询模式：计算当前主题和下一个主题的混合
+      const currentIndex = currentThemeIndexRef.current;
+      const nextIndex = (currentIndex + 1) % themeIds.length;
+      const currentThemeData = themes[themeIds[currentIndex]];
+      const nextThemeData = themes[themeIds[nextIndex]];
+      return lerpThemes(currentThemeData, nextThemeData, cycleProgress);
+    } else {
+      // 固定主题模式
+      return themes[themeMode] || themes['nocturnal'];
+    }
+  }, [themeMode, cycleProgress]);
+
+  const t = currentTheme;
   const bgColor = `#${t.uBaseColor1.getHexString()}`;
   const accentColor = `#${t.uRippleColor.getHexString()}`;
 
   /* applyUserProperties 回调 - Wallpaper Engine 配置项变更 */
   const handleProperties = useCallback((properties: WallpaperProperties) => {
     if (properties.theme?.value) {
-      setThemeName(properties.theme.value as string);
+      const themeValue = properties.theme.value as string;
+      setThemeMode(themeValue);
+      if (themeValue !== 'cycle') {
+        setThemeName(themeValue);
+      }
     }
     if (properties.idleWaveEnabled?.value !== undefined) {
       setIdleWaveEnabled(properties.idleWaveEnabled.value as boolean);
@@ -133,7 +206,49 @@ function WallpaperApp() {
     if (properties.meteorClickEnabled?.value !== undefined) {
       setMeteorClickEnabled(properties.meteorClickEnabled.value as boolean);
     }
+    if (properties.peakColorEnabled?.value !== undefined) {
+      setPeakColorEnabled(properties.peakColorEnabled.value as boolean);
+    }
+    if (properties.peakColorIntensity?.value !== undefined) {
+      setPeakColorIntensity(properties.peakColorIntensity.value as number);
+    }
+    if (properties.themeCycleInterval?.value !== undefined) {
+      setThemeCycleInterval(properties.themeCycleInterval.value as number);
+    }
   }, []);
+
+  /* 主题轮询过渡动画 */
+  useEffect(() => {
+    if (themeMode !== 'cycle') return;
+    
+    // 初始化开始时间
+    cycleStartRef.current = performance.now();
+    
+    let animationId: number;
+    
+    const animate = () => {
+      const now = performance.now();
+      const elapsed = (now - cycleStartRef.current) / 1000; // 秒
+      const progress = elapsed / themeCycleInterval; // 0-1 之间的进度
+      
+      if (progress >= 1) {
+        // 过渡完成，切换到下一个主题
+        currentThemeIndexRef.current = (currentThemeIndexRef.current + 1) % themeIds.length;
+        cycleStartRef.current = now;
+        setCycleProgress(0);
+      } else {
+        setCycleProgress(progress);
+      }
+      
+      animationId = requestAnimationFrame(animate);
+    };
+    
+    animationId = requestAnimationFrame(animate);
+    
+    return () => {
+      if (animationId) cancelAnimationFrame(animationId);
+    };
+  }, [themeMode, themeCycleInterval]);
 
   /* 注册 Wallpaper Engine 核心回调 */
   useEffect(() => {
@@ -148,36 +263,6 @@ function WallpaperApp() {
       w.wallpaperReady();
     }
   }, [handleProperties]);
-
-  /* 注册 Wallpaper Engine Media Integration 回调 */
-  useEffect(() => {
-    const w = window as any;
-    if (w.wallpaperRegisterMediaPropertiesListener) {
-      w.wallpaperRegisterMediaPropertiesListener((props: any) => {
-        setMediaTitle(props.title || '');
-        setMediaArtist(props.artist || '');
-      });
-    }
-    if (w.wallpaperRegisterMediaThumbnailListener) {
-      w.wallpaperRegisterMediaThumbnailListener((thumb: any) => {
-        setMediaThumbnail(thumb.thumbnail || '');
-        setPrimaryColor(thumb.primaryColor || '');
-        setTextColor(thumb.textColor || '');
-      });
-    }
-    if (w.wallpaperRegisterMediaPlaybackListener) {
-      w.wallpaperRegisterMediaPlaybackListener((pb: any) => {
-        const PLAYING = (w.wallpaperMediaIntegration?.PLAYBACK_PLAYING) || 0;
-        setIsMediaPlaying(pb.state === PLAYING);
-      });
-    }
-    if (w.wallpaperRegisterMediaTimelineListener) {
-      w.wallpaperRegisterMediaTimelineListener((tl: any) => {
-        setMediaPosition(tl.position || 0);
-        setMediaDuration(tl.duration || 0);
-      });
-    }
-  }, []);
 
   /* 空闲波浪检测 */
   const [isIdle, setIsIdle] = useState(true);
@@ -281,7 +366,7 @@ function WallpaperApp() {
         <Canvas camera={{ position: [35, 25, 35], fov: 45 }}>
           <MapScene
             ref={mapSceneRef}
-            theme={themeName}
+            theme={currentTheme}
             audioIntensity={audioIntensity}
             responseRange={responseRange}
             gridSize={gridSize}
@@ -290,6 +375,8 @@ function WallpaperApp() {
             cameraDistance={cameraDistance}
             cameraAngleX={cameraAngleX}
             cameraAngleY={cameraAngleY}
+            peakColorEnabled={peakColorEnabled}
+            peakColorIntensity={peakColorIntensity}
           />
         </Canvas>
       </div>
@@ -456,7 +543,7 @@ function WallpaperApp() {
                     <div
                       style={{
                         flexShrink: 0,
-                        fontFamily: '"JetBrains Mono", ui-monospace, monospace',
+                        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
                         color: 'rgba(255,255,255,0.30)',
                         fontVariantNumeric: 'tabular-nums',
                         fontSize: `${sizes.timeText}px`,

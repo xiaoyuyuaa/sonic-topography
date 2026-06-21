@@ -10,7 +10,42 @@ export interface ThemeColors {
   uWarmCore: THREE.Color;
   uWarmEdge: THREE.Color;
   uRippleColor: THREE.Color;
+  uPeakColor: THREE.Color; // 中间凸起峰值颜色
   uGlowIntensity: number;
+}
+
+/* 主题ID列表，用于轮询 */
+export const themeIds = [
+  'nocturnal',
+  'ocean-deep',
+  'arctic-aurora',
+  'cyber-forest',
+  'golden-hour',
+  'ember-fire',
+  'crimson-sunset',
+  'coral-mirage',
+  'neon-tokyo',
+  'minimal-monochrome',
+] as const;
+
+export type ThemeId = typeof themeIds[number];
+
+/* 混合两个主题，t 为 0-1 之间的插值因子 */
+export function lerpThemes(theme1: ThemeColors, theme2: ThemeColors, t: number): ThemeColors {
+  const clampedT = Math.max(0, Math.min(1, t));
+  return {
+    name: clampedT < 0.5 ? theme1.name : theme2.name,
+    id: clampedT < 0.5 ? theme1.id : theme2.id,
+    uBaseColor1: new THREE.Color().lerpColors(theme1.uBaseColor1, theme2.uBaseColor1, clampedT),
+    uBaseColor2: new THREE.Color().lerpColors(theme1.uBaseColor2, theme2.uBaseColor2, clampedT),
+    uCoolCore: new THREE.Color().lerpColors(theme1.uCoolCore, theme2.uCoolCore, clampedT),
+    uCoolEdge: new THREE.Color().lerpColors(theme1.uCoolEdge, theme2.uCoolEdge, clampedT),
+    uWarmCore: new THREE.Color().lerpColors(theme1.uWarmCore, theme2.uWarmCore, clampedT),
+    uWarmEdge: new THREE.Color().lerpColors(theme1.uWarmEdge, theme2.uWarmEdge, clampedT),
+    uRippleColor: new THREE.Color().lerpColors(theme1.uRippleColor, theme2.uRippleColor, clampedT),
+    uPeakColor: new THREE.Color().lerpColors(theme1.uPeakColor, theme2.uPeakColor, clampedT),
+    uGlowIntensity: THREE.MathUtils.lerp(theme1.uGlowIntensity, theme2.uGlowIntensity, clampedT),
+  };
 }
 
 export const themes: Record<string, ThemeColors> = {
@@ -25,6 +60,7 @@ export const themes: Record<string, ThemeColors> = {
     uWarmCore: new THREE.Color(0.65, 0.25, 1.0),     // 亮紫
     uWarmEdge: new THREE.Color(0.5, 0.1, 0.8),       // 中紫
     uRippleColor: new THREE.Color(0.5, 0.2, 1.0),
+    uPeakColor: new THREE.Color(1.0, 0.55, 0.05),    // 亮橙色 - 互补色
     uGlowIntensity: 1.0,
   },
   // === 2. 深海蓝 (Deep Ocean Blue) ===
@@ -38,6 +74,7 @@ export const themes: Record<string, ThemeColors> = {
     uWarmCore: new THREE.Color(0.15, 0.55, 1.0),      // 天蓝
     uWarmEdge: new THREE.Color(0.05, 0.35, 0.85),     // 中蓝
     uRippleColor: new THREE.Color(0.1, 0.5, 1.0),
+    uPeakColor: new THREE.Color(1.0, 0.75, 0.1),      // 金黄色 - 暖色对比
     uGlowIntensity: 1.1,
   },
   // === 3. 冰蓝 (Arctic Cyan) ===
@@ -51,6 +88,7 @@ export const themes: Record<string, ThemeColors> = {
     uWarmCore: new THREE.Color(0.2, 1.0, 0.85),       // 亮青
     uWarmEdge: new THREE.Color(0.05, 0.6, 0.6),       // 绿松
     uRippleColor: new THREE.Color(0.1, 0.9, 0.9),
+    uPeakColor: new THREE.Color(1.0, 0.25, 0.35),     // 珊瑚红 - 互补色
     uGlowIntensity: 1.25,
   },
   // === 4. 翡翠绿 (Emerald Green) ===
@@ -64,6 +102,7 @@ export const themes: Record<string, ThemeColors> = {
     uWarmCore: new THREE.Color(0.4, 1.0, 0.3),        // 亮绿
     uWarmEdge: new THREE.Color(0.15, 0.65, 0.2),      // 草绿
     uRippleColor: new THREE.Color(0.3, 1.0, 0.4),
+    uPeakColor: new THREE.Color(1.0, 0.2, 0.5),       // 品红色 - 互补色
     uGlowIntensity: 1.3,
   },
   // === 5. 暖金黄 (Warm Gold) ===
@@ -77,6 +116,7 @@ export const themes: Record<string, ThemeColors> = {
     uWarmCore: new THREE.Color(1.0, 0.92, 0.35),       // 亮金
     uWarmEdge: new THREE.Color(0.85, 0.7, 0.15),       // 暖金
     uRippleColor: new THREE.Color(1.0, 0.85, 0.25),
+    uPeakColor: new THREE.Color(0.2, 0.5, 1.0),        // 宝蓝色 - 冷色对比
     uGlowIntensity: 1.2,
   },
   // === 6. 琥珀橙 (Amber Orange) ===
@@ -90,6 +130,7 @@ export const themes: Record<string, ThemeColors> = {
     uWarmCore: new THREE.Color(1.0, 0.78, 0.15),      // 琥珀
     uWarmEdge: new THREE.Color(0.9, 0.55, 0.05),      // 深琥珀
     uRippleColor: new THREE.Color(1.0, 0.65, 0.1),
+    uPeakColor: new THREE.Color(0.1, 0.4, 1.0),        // 深蓝色 - 互补色
     uGlowIntensity: 1.5,
   },
   // === 7. 血红 (Crimson Red) ===
@@ -103,6 +144,7 @@ export const themes: Record<string, ThemeColors> = {
     uWarmCore: new THREE.Color(1.0, 0.35, 0.2),        // 亮红
     uWarmEdge: new THREE.Color(0.85, 0.12, 0.1),       // 中红
     uRippleColor: new THREE.Color(1.0, 0.15, 0.1),
+    uPeakColor: new THREE.Color(0.1, 0.9, 0.7),        // 青绿色 - 互补色
     uGlowIntensity: 1.4,
   },
   // === 8. 珊瑚粉 (Coral Pink) ===
@@ -116,6 +158,7 @@ export const themes: Record<string, ThemeColors> = {
     uWarmCore: new THREE.Color(1.0, 0.55, 0.55),       // 粉红
     uWarmEdge: new THREE.Color(0.9, 0.3, 0.35),        // 中珊瑚
     uRippleColor: new THREE.Color(1.0, 0.4, 0.4),
+    uPeakColor: new THREE.Color(0.1, 0.7, 1.0),        // 天蓝色 - 冷色对比
     uGlowIntensity: 1.3,
   },
   // === 9. 霓虹紫粉 (Neon Magenta) ===
@@ -129,6 +172,7 @@ export const themes: Record<string, ThemeColors> = {
     uWarmCore: new THREE.Color(1.0, 0.25, 0.85),       // 亮紫粉
     uWarmEdge: new THREE.Color(0.8, 0.1, 0.7),         // 中紫粉
     uRippleColor: new THREE.Color(1.0, 0.2, 0.75),
+    uPeakColor: new THREE.Color(0.95, 1.0, 0.15),      // 荧光黄绿 - 互补色
     uGlowIntensity: 1.6,
   },
   // === 10. 极简黑白 (Greyscale) ===
@@ -142,6 +186,7 @@ export const themes: Record<string, ThemeColors> = {
     uWarmCore: new THREE.Color(1.0, 1.0, 1.0),
     uWarmEdge: new THREE.Color(0.6, 0.6, 0.6),
     uRippleColor: new THREE.Color(1.0, 1.0, 1.0),
+    uPeakColor: new THREE.Color(1.0, 1.0, 1.0),        // 纯白
     uGlowIntensity: 0.7,
   },
 };

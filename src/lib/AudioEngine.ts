@@ -40,23 +40,21 @@ export class TriggerConfig {
   public prevSmoothedFlux: number = 0;
 
   constructor(public action: 'Pulse' | 'Meteor') {
-      this.enabled = true; // Both Pulse and Meteor enabled by default
+      this.enabled = true;
       this.mode = 'Auto Beat';
       if (action === 'Pulse') {
           // Pulse: target sub-bass to low-mid range (~0-516 Hz)
-          // Covers kick drums, bass, snare body, and low frequency transients
           this.bandStart = 0;
           this.bandEnd = 12;
           this.sensitivity = 0.22;
-          this.cooldown = 45;   // ~0.75s at 60fps, allows faster beat tracking
+          this.cooldown = 45;
           this.pulseStrength = 0.25;
       } else if (action === 'Meteor') {
           // Meteor: target high and very high frequencies (~4000-15000 Hz)
-          // Covers vocal sibilance, cymbals, hi-hats, and bright airy transients
           this.bandStart = 92;
           this.bandEnd = 340;
           this.sensitivity = 0.40;
-          this.cooldown = 180;  // ~3s between meteors for dramatic effect
+          this.cooldown = 180;
           this.pulseStrength = 0.50;
       }
   }
@@ -70,263 +68,15 @@ export class TriggerConfig {
 
 
 export class AudioEngine {
-  private audioCtx: AudioContext | null = null;
-  private analyser: AnalyserNode | null = null;
-  private source: MediaElementAudioSourceNode | null = null;
-  private fadeNode: GainNode | null = null;
-  private captureStream: MediaStream | null = null;
-  private captureSource: MediaStreamAudioSourceNode | null = null;
-  public audioElement: HTMLAudioElement;
-
-  private dataArray: Uint8Array = new Uint8Array(0);
-  
   public isPlaying: boolean = false;
-  public isCapturing: boolean = false;
-  private pauseTimeout: ReturnType<typeof setTimeout> | null = null;
-  private fadeTime = 0.5; // seconds
-  private visualReleaseUntil = 0;
-  private visualReleaseTime = 1.6; // seconds
-  private idleStartTime: number = 0; // 记录音频停止的时间
-  private idleTransitionDuration = 1.0; // 空闲等待时间（秒）
-  private idleFadeOutDuration = 1.0; // 空闲过渡时间（秒）
-  private lastActiveTime: number = 0; // 记录最后一次有音频能量的时间
-  private lastIdleTime: number = 0; // 记录最后一次无音频能量的时间
-  private idleEnergyThreshold = 0.02; // 空闲能量阈值，低于此值认为无音频
-  private currentIdleIntensity: number = 0; // 当前空闲波纹强度（用于平滑过渡）
-  private lastStateChangeTime: number = 0; // 记录最后一次状态变化的时间
-  private debounceDuration = 1.0; // 防抖时间（秒）
-  private lastHasEnergy: boolean = false; // 上一次的能量状态
-  
-  private beatThreshold = 0.4;
-  private beatDecay = 0.95;
-  private beatHoldTime = 20;
-  private beatHold = 0;
-  
-  // Legacy fields removed
-
-  public onBeat?: (strength: number, type: 'kick' | 'snare') => void;
-
-  constructor() {
-    this.audioElement = new Audio();
-    this.audioElement.crossOrigin = 'anonymous';
-    
-    // Attempt to handle ended events
-    this.audioElement.addEventListener('ended', () => {
-      this.isPlaying = false;
-    });
-
-    this.audioElement.addEventListener('play', () => {
-      this.isPlaying = true;
-    });
-    
-    this.audioElement.addEventListener('pause', () => {
-      this.isPlaying = false;
-    });
-  }
-
-  public init() {
-    if (this.audioCtx) return;
-    
-    // @ts-ignore
-    const AudioContext = window.AudioContext || window.webkitAudioContext;
-    this.audioCtx = new AudioContext();
-    
-    this.analyser = this.audioCtx.createAnalyser();
-    this.analyser.fftSize = 1024; // 512 bins
-    this.analyser.smoothingTimeConstant = 0.8;
-    
-    this.fadeNode = this.audioCtx.createGain();
-    this.fadeNode.gain.value = 0.001; // Start muted
-    
-    this.source = this.audioCtx.createMediaElementSource(this.audioElement);
-    this.source.connect(this.fadeNode);
-    this.fadeNode.connect(this.audioCtx.destination);
-    // Also feed to analyser
-    this.fadeNode.connect(this.analyser);
-    
-    this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
-  }
-
-  public async startCapture() {
-    await this.init();
-    if (this.audioCtx?.state === 'suspended') {
-      this.audioCtx.resume();
-    }
-    
-    this.pause(); // stop file playback if any
-
-    try {
-      this.captureStream = await navigator.mediaDevices.getDisplayMedia({ 
-        audio: {
-            echoCancellation: false,
-            noiseSuppression: false,
-            autoGainControl: false,
-        }, 
-        video: true 
-      });
-      if (!this.audioCtx || !this.analyser) return;
-
-      if (this.captureSource) {
-        this.captureSource.disconnect();
-      }
-
-      this.captureSource = this.audioCtx.createMediaStreamSource(this.captureStream);
-      // Connect directly to analyser, NOT to destination (avoids feedback)
-      this.captureSource.connect(this.analyser);
-      
-      this.isCapturing = true;
-      this.isPlaying = true;
-
-      this.captureStream.getVideoTracks()[0]?.addEventListener('ended', () => {
-         this.stopCapture();
-      });
-
-    } catch (e) {
-      console.warn('System audio capture canceled or denied:', e);
-      this.isCapturing = false;
-      this.isPlaying = false;
-    }
-  }
-
-  public stopCapture() {
-    this.beginVisualRelease();
-    if (this.captureStream) {
-      this.captureStream.getTracks().forEach(track => track.stop());
-      this.captureStream = null;
-    }
-    if (this.captureSource) {
-      this.captureSource.disconnect();
-      this.captureSource = null;
-    }
-    this.isCapturing = false;
-    this.isPlaying = false;
-  }
-
-  public loadFile(file: File) {
-    this.beginVisualRelease();
-    this.stopCapture();
-    const url = URL.createObjectURL(file);
-    this.audioElement.src = url;
-    this.audioElement.load();
-  }
-
-  public loadUrl(url: string) {
-    this.beginVisualRelease();
-    this.stopCapture();
-    this.audioElement.src = url;
-    this.audioElement.load();
-  }
-
-  public play() {
-    if (!this.audioElement.src) return;
-    if (this.audioCtx?.state === 'suspended') {
-      this.audioCtx.resume();
-    }
-    
-    if (this.pauseTimeout) {
-      clearTimeout(this.pauseTimeout);
-      this.pauseTimeout = null;
-    }
-
-    if (this.fadeNode && this.audioCtx) {
-      this.fadeNode.gain.cancelScheduledValues(this.audioCtx.currentTime);
-      this.fadeNode.gain.setValueAtTime(this.fadeNode.gain.value, this.audioCtx.currentTime);
-      this.fadeNode.gain.linearRampToValueAtTime(1.0, this.audioCtx.currentTime + this.fadeTime);
-    }
-    
-    this.audioElement.play().catch(e => console.warn('Audio play error:', e));
-  }
-
-  public pause() {
-    this.beginVisualRelease();
-    if (this.fadeNode && this.audioCtx) {
-       this.fadeNode.gain.cancelScheduledValues(this.audioCtx.currentTime);
-       this.fadeNode.gain.setValueAtTime(this.fadeNode.gain.value, this.audioCtx.currentTime);
-       this.fadeNode.gain.linearRampToValueAtTime(0.001, this.audioCtx.currentTime + this.fadeTime);
-       
-       this.pauseTimeout = setTimeout(() => {
-          this.audioElement.pause();
-       }, this.fadeTime * 1000);
-    } else {
-       this.audioElement.pause();
-    }
-  }
-  
-  public togglePlay() {
-    if (this.isPlaying) {
-      this.pause();
-    } else {
-      this.play();
-    }
-  }
-
-  private beginVisualRelease(seconds = this.visualReleaseTime) {
-    this.visualReleaseUntil = performance.now() + seconds * 1000;
-    this.idleStartTime = performance.now(); // 记录空闲开始时间
-  }
-
-  // 计算空闲波纹强度
-  // 有能量 → 过渡到0
-  // 无能量 → 过渡到1
-  // 防抖机制：状态变化后1秒内又变回原状态，则不执行切换
-  public getIdleWaveIntensity(): number {
-    const now = performance.now();
-    let targetIntensity = 1; // 默认无能量，显示空闲波浪
-    
-    // Wallpaper Engine 模式：基于音频能量判断
-    if (this.wallpaperAudioReceived) {
-      // 判断当前是否有能量
-      const hasEnergy = this.lastActiveTime > this.lastIdleTime;
-      
-      // 防抖逻辑：检测状态变化
-      if (hasEnergy !== this.lastHasEnergy) {
-        // 状态发生变化，记录时间
-        this.lastStateChangeTime = now;
-        this.lastHasEnergy = hasEnergy;
-      }
-      
-      // 检查是否超过防抖时间
-      const debounceElapsed = (now - this.lastStateChangeTime) / 1000;
-      if (debounceElapsed >= this.debounceDuration) {
-        // 超过防抖时间，执行状态切换
-        if (hasEnergy) {
-          targetIntensity = 0; // 有能量，隐藏空闲波浪
-        }
-      }
-    } else {
-      // 普通模式：基于 isPlaying 状态
-      if (this.isPlaying) {
-        targetIntensity = 0;
-      }
-    }
-    
-    // 平滑过渡：根据目标值渐变
-    const fadeSpeed = 1.0 / this.idleFadeOutDuration;
-    const delta = fadeSpeed * 0.016; // 约60fps
-    
-    if (targetIntensity > this.currentIdleIntensity) {
-      this.currentIdleIntensity = Math.min(targetIntensity, this.currentIdleIntensity + delta);
-    } else if (targetIntensity < this.currentIdleIntensity) {
-      this.currentIdleIntensity = Math.max(targetIntensity, this.currentIdleIntensity - delta);
-    }
-    
-    return this.currentIdleIntensity;
-  }
-
-  // 设置空闲等待时间（已废弃，保留兼容）
-  public setIdleWaveDelay(seconds: number) {
-    this.idleTransitionDuration = seconds;
-  }
-
-  // 设置防抖时间
-  public setIdleWaveDebounce(seconds: number) {
-    this.debounceDuration = seconds;
-  }
-
-  // 设置空闲过渡时间
-  public setIdleFadeOutDuration(seconds: number) {
-    this.idleFadeOutDuration = seconds;
-  }
+  private idleFadeOutDuration = 1.0;
+  private lastActiveTime: number = 0;
+  private lastIdleTime: number = 0;
+  private idleEnergyThreshold = 0.02;
+  private currentIdleIntensity: number = 0;
+  private lastStateChangeTime: number = 0;
+  private debounceDuration = 1.0;
+  private lastHasEnergy: boolean = false;
 
   private prevData: number[] = new Array(512).fill(0);
   private prevBrightness: number = 0;
@@ -343,13 +93,13 @@ export class AudioEngine {
 
   public pulseTrigger = new TriggerConfig('Pulse');
   public meteorTrigger = new TriggerConfig('Meteor');
-  
+
   public onFreqTrigger?: (strength: number, type: 'Kick' | 'Snare' | 'Advanced', action: 'Pulse' | 'Meteor') => void;
 
-  private evaluateTrigger(config: TriggerConfig, fluxScore: number) {
-      if (!config.enabled || !this.isPlaying) return;
-      
-      const binCount = this.dataArray.length;
+  private evaluateTrigger(config: TriggerConfig, fluxScore: number, wallpaperData: number[]) {
+      if (!config.enabled) return;
+
+      const binCount = 512;
       let eVal = 0;
       let triggered = false;
       const [startBin, endBin] = config.getTriggerRange();
@@ -359,11 +109,11 @@ export class AudioEngine {
              let sum = 0;
              let count = 0;
              for (let k = startBin; k <= endBin; k++) {
-                sum += this.dataArray[k] / 255.0;
+                sum += wallpaperData[k] || 0;
                 count++;
              }
              eVal = sum / count;
-             
+
              config.lastEvalThresh = config.threshold;
              if (config.currentCooldown <= 0 && eVal > config.threshold) {
                  triggered = true;
@@ -372,7 +122,7 @@ export class AudioEngine {
           config.lastEvalEnergy = eVal;
           if (triggered) {
               if (this.onFreqTrigger) this.onFreqTrigger(eVal, 'Advanced', config.action);
-              config.currentCooldown = 60; // 1s
+              config.currentCooldown = 60;
           }
       }
 
@@ -412,17 +162,6 @@ export class AudioEngine {
       }
   }
 
-  public getRawFrequencyData(): Uint8Array {
-    // In Wallpaper Engine mode, convert wallpaper audio to Uint8Array
-    if (this.isWallpaperEngineMode()) {
-      const wallpaperData = this.getWallpaperAudioData();
-      for (let i = 0; i < 512 && i < wallpaperData.length; i++) {
-        this.dataArray[i] = Math.floor(wallpaperData[i] * 255);
-      }
-    }
-    return this.dataArray;
-  }
-
   // Check if running in Wallpaper Engine mode
   public isWallpaperEngineMode(): boolean {
     return this.wallpaperAudioReceived;
@@ -430,11 +169,11 @@ export class AudioEngine {
 
   // Set audio data from Wallpaper Engine callback
   public setWallpaperAudioData(audioData: number[]) {
-    // First time initialization - start in active state (noise = 0)
+    // First time initialization
     if (!this.wallpaperAudioReceived) {
       this.lastActiveTime = performance.now();
-      this.lastIdleTime = 0; // 设为0，表示从未进入空闲
-      this.lastHasEnergy = true; // 启动时默认有能量
+      this.lastIdleTime = 0;
+      this.lastHasEnergy = true;
       this.lastStateChangeTime = performance.now();
     }
     this.wallpaperAudioReceived = true;
@@ -452,21 +191,6 @@ export class AudioEngine {
   }
 
   public getAudioData(): AudioData {
-    // Wallpaper Engine mode - use wallpaper audio API
-    if (this.isWallpaperEngineMode()) {
-      return this.getAudioDataFromWallpaper();
-    }
-
-    // Regular mode - use Web Audio API
-    if (!this.analyser) {
-      return { ...this.smoothedData };
-    }
-
-    return this.getAudioDataFromAnalyser();
-  }
-
-  // Get audio data using Wallpaper Engine API
-  private getAudioDataFromWallpaper(): AudioData {
     const wallpaperData = this.getWallpaperAudioData();
     const binCount = wallpaperData.length || 512;
 
@@ -480,10 +204,10 @@ export class AudioEngine {
     let fluxPulse = 0;
     let fluxMeteor = 0;
 
-    this.isPlaying = true; // Always playing in wallpaper mode
+    this.isPlaying = true;
 
     for (let i = 0; i < binCount; i++) {
-      const val = wallpaperData[i] || 0; // Wallpaper data is already 0-1
+      const val = wallpaperData[i] || 0;
       energySum += val;
 
       centroidNum += i * val;
@@ -506,47 +230,44 @@ export class AudioEngine {
 
       this.prevData[i] = val;
 
-      // Optimized frequency bands for better audio response coverage
-      // Main response covers 0-3.5kHz (most musical content)
-      // FFT: 512 bins @ 44.1kHz = ~43Hz per bin
-      // Center lift responds to wider low-mid range for more visible effect
-      if (i <= 4) subBassSum += val;        // 0-172 Hz: sub-bass + bass rumble (expanded)
-      else if (i <= 12) bassSum += val;     // 172-516 Hz: bass foundation (expanded)
-      else if (i <= 24) lowMidSum += val;   // 516-1032 Hz: vocals, instruments (expanded)
-      else if (i <= 45) midSum += val;      // 1032-1935 Hz: mid frequencies
-      else if (i <= 81) highMidSum += val;  // 1935-3483 Hz: mid-high, presence
-      else if (i <= 120) presenceSum += val; // 3.5-5.2 kHz: high frequency detail
-      else if (i <= 180) brillianceSum += val; // 5.2-7.7 kHz: brilliance, air
-      else if (i <= 255) airSum += val;     // 7.7-11 kHz: ultra-high frequencies
+      // Frequency bands
+      if (i <= 4) subBassSum += val;
+      else if (i <= 12) bassSum += val;
+      else if (i <= 24) lowMidSum += val;
+      else if (i <= 45) midSum += val;
+      else if (i <= 81) highMidSum += val;
+      else if (i <= 120) presenceSum += val;
+      else if (i <= 180) brillianceSum += val;
+      else if (i <= 255) airSum += val;
     }
 
     const energy = energySum / binCount;
-    
+
     // Update last active/idle time based on audio energy
     if (energy > this.idleEnergyThreshold) {
       this.lastActiveTime = performance.now();
     } else {
       this.lastIdleTime = performance.now();
     }
-    
-    // Evaluate triggers directly (no debounce needed)
-    this.evaluateTrigger(this.pulseTrigger, fluxPulse);
-    this.evaluateTrigger(this.meteorTrigger, fluxMeteor);
 
-    // Average amplitudes per band (updated bin counts)
-    const subBass = subBassSum / 5;      // 5 bins (expanded)
-    const bass = bassSum / 9;           // 9 bins (expanded)
-    const lowMid = lowMidSum / 13;      // 13 bins (expanded)
-    const mid = midSum / 21;            // 21 bins
-    const highMid = highMidSum / 37;    // 37 bins - covers 0-3.5kHz
-    const presence = presenceSum / 40;  // 40 bins
-    const brilliance = brillianceSum / 61; // 61 bins
-    const air = airSum / 76;            // 76 bins
+    // Evaluate triggers
+    this.evaluateTrigger(this.pulseTrigger, fluxPulse, wallpaperData);
+    this.evaluateTrigger(this.meteorTrigger, fluxMeteor, wallpaperData);
 
-    // Legacy mapping for compatibility (updated bin counts)
-    const oldBass = (subBassSum + bassSum + lowMidSum) / 27;  // 5+9+13 bins (expanded)
-    const oldMid = (midSum + highMidSum) / 58;                // 21+37 bins
-    const oldTreble = (presenceSum + brillianceSum + airSum) / 177; // 40+61+76 bins
+    // Average amplitudes per band
+    const subBass = subBassSum / 5;
+    const bass = bassSum / 9;
+    const lowMid = lowMidSum / 13;
+    const mid = midSum / 21;
+    const highMid = highMidSum / 37;
+    const presence = presenceSum / 40;
+    const brilliance = brillianceSum / 61;
+    const air = airSum / 76;
+
+    // Legacy mapping for compatibility
+    const oldBass = (subBassSum + bassSum + lowMidSum) / 27;
+    const oldMid = (midSum + highMidSum) / 58;
+    const oldTreble = (presenceSum + brillianceSum + airSum) / 177;
 
     // Timbral Metrics
     const warmth = energySum > 0 ? (subBassSum + bassSum + lowMidSum + midSum) / energySum : 0;
@@ -596,153 +317,48 @@ export class AudioEngine {
     return { ...this.smoothedData };
   }
 
-  // Original getAudioData implementation renamed
-  private getAudioDataFromAnalyser(): AudioData {
-    if (!this.analyser) {
-      return { ...this.smoothedData };
-    }
+  // Calculate idle wave intensity
+  public getIdleWaveIntensity(): number {
+    const now = performance.now();
+    let targetIntensity = 1;
 
-    const isVisualReleasing = performance.now() < this.visualReleaseUntil;
-    let energySum = 0;
-    let centroidNum = 0;
-    let centroidDen = 0;
+    if (this.wallpaperAudioReceived) {
+      const hasEnergy = this.lastActiveTime > this.lastIdleTime;
 
-    let subBassSum = 0, bassSum = 0, lowMidSum = 0, midSum = 0;
-    let highMidSum = 0, presenceSum = 0, brillianceSum = 0, airSum = 0;
-    let jumpVolatilitySum = 0;
-    let fluxScore = 0;
-
-    const binCount = this.dataArray.length; // 512
-
-    if (this.isPlaying) {
-      this.analyser.getByteFrequencyData(this.dataArray);
-
-      let fluxPulse = 0;
-      let fluxMeteor = 0;
-
-      for (let i = 0; i < binCount; i++) {
-          const val = this.dataArray[i] / 255.0; // normalize 0-1
-          energySum += val;
-          
-          centroidNum += i * val;
-          centroidDen += val;
-
-          const prevVal = this.prevData[i] || 0;
-          jumpVolatilitySum += Math.abs(val - prevVal);
-          
-          // Flux for pulse
-          if (i >= this.pulseTrigger.bandStart && i <= this.pulseTrigger.bandEnd) {
-             const diff = val - prevVal;
-             if (diff > 0) fluxPulse += diff;
-          }
-
-          // Flux for meteor
-          if (i >= this.meteorTrigger.bandStart && i <= this.meteorTrigger.bandEnd) {
-             const diff = val - prevVal;
-             if (diff > 0) fluxMeteor += diff;
-          }
-
-          this.prevData[i] = val;
-
-          // Optimized frequency bands for better audio response coverage
-          // Main response covers 0-3.5kHz (most musical content)
-          // FFT: 512 bins @ 44.1kHz = ~43Hz per bin
-          // Center lift responds to wider low-mid range for more visible effect
-          if (i <= 4) subBassSum += val;        // 0-172 Hz: sub-bass + bass rumble (expanded)
-          else if (i <= 12) bassSum += val;     // 172-516 Hz: bass foundation (expanded)
-          else if (i <= 24) lowMidSum += val;   // 516-1032 Hz: vocals, instruments (expanded)
-          else if (i <= 45) midSum += val;      // 1032-1935 Hz: mid frequencies
-          else if (i <= 81) highMidSum += val;  // 1935-3483 Hz: mid-high, presence
-          else if (i <= 120) presenceSum += val; // 3.5-5.2 kHz: high frequency detail
-          else if (i <= 180) brillianceSum += val; // 5.2-7.7 kHz: brilliance, air
-          else if (i <= 255) airSum += val;     // 7.7-11 kHz: ultra-high frequencies
+      if (hasEnergy !== this.lastHasEnergy) {
+        this.lastStateChangeTime = now;
+        this.lastHasEnergy = hasEnergy;
       }
-      
-      this.evaluateTrigger(this.pulseTrigger, fluxPulse);
-      this.evaluateTrigger(this.meteorTrigger, fluxMeteor);
-    } else {
-      // When playback stops or switches, decay raw and smoothed values instead of snapping to zero.
-      for (let i = 0; i < binCount; i++) {
-          this.dataArray[i] = isVisualReleasing ? Math.floor(this.dataArray[i] * 0.94) : 0;
-          this.prevData[i] = 0;
+
+      const debounceElapsed = (now - this.lastStateChangeTime) / 1000;
+      if (debounceElapsed >= this.debounceDuration) {
+        if (hasEnergy) {
+          targetIntensity = 0;
+        }
       }
     }
 
-    const energy = energySum / binCount;
-    
-    // Update last active/idle time based on audio energy (普通模式)
-    if (this.isPlaying && energy > this.idleEnergyThreshold) {
-      this.lastActiveTime = performance.now();
-    } else {
-      this.lastIdleTime = performance.now();
+    // Smooth transition
+    const fadeSpeed = 1.0 / this.idleFadeOutDuration;
+    const delta = fadeSpeed * 0.016;
+
+    if (targetIntensity > this.currentIdleIntensity) {
+      this.currentIdleIntensity = Math.min(targetIntensity, this.currentIdleIntensity + delta);
+    } else if (targetIntensity < this.currentIdleIntensity) {
+      this.currentIdleIntensity = Math.max(targetIntensity, this.currentIdleIntensity - delta);
     }
-    
-    // Average amplitudes per band (updated bin counts)
-    const subBass = subBassSum / 5;      // 5 bins (expanded)
-    const bass = bassSum / 9;           // 9 bins (expanded)
-    const lowMid = lowMidSum / 13;      // 13 bins (expanded)
-    const mid = midSum / 21;            // 21 bins
-    const highMid = highMidSum / 37;    // 37 bins - covers 0-3.5kHz
-    const presence = presenceSum / 40;  // 40 bins
-    const brilliance = brillianceSum / 61; // 61 bins
-    const air = airSum / 76;            // 76 bins
 
-    // Precise band isolation for better beat detection (updated bin counts)
-    const kickEnergy = (subBassSum + bassSum) / 14;  // 5+9 bins (expanded)
-    const snareEnergy = (midSum + highMidSum) / 58;   // 21+37 bins
+    return this.currentIdleIntensity;
+  }
 
-    // Legacy mapping for compatibility (updated bin counts)
-    const oldBass = (subBassSum + bassSum + lowMidSum) / 27;  // 5+9+13 bins (expanded)
-    const oldMid = (midSum + highMidSum) / 58;                // 21+37 bins
-    const oldTreble = (presenceSum + brillianceSum + airSum) / 177; // 40+61+76 bins
+  // Set debounce time
+  public setIdleWaveDebounce(seconds: number) {
+    this.debounceDuration = seconds;
+  }
 
-    // Timbral Metrics
-    const warmth = energySum > 0 ? (subBassSum + bassSum + lowMidSum + midSum) / energySum : 0;
-    const brightness = energySum > 0 ? (presenceSum + brillianceSum + airSum) / energySum : 0;
-    
-    const sharpness = Math.max(0, brightness - this.prevBrightness) * 10;
-    this.prevBrightness = brightness;
-
-    const smoothnessVal = Math.max(0, 1.0 - (jumpVolatilitySum / binCount) * 2.0);
-    
-    const activeThreshold = energy * 1.5;
-    let activeBands = 0;
-    if (subBass > activeThreshold) activeBands++;
-    if (bass > activeThreshold) activeBands++;
-    if (lowMid > activeThreshold) activeBands++;
-    if (mid > activeThreshold) activeBands++;
-    if (highMid > activeThreshold) activeBands++;
-    if (presence > activeThreshold) activeBands++;
-    if (brilliance > activeThreshold) activeBands++;
-    if (air > activeThreshold) activeBands++;
-    const density = activeBands / 8;
-
-    const spectralCentroid = centroidDen > 0 ? centroidNum / centroidDen : 0;
-
-    // Apply Exponential Smoothing to prevent sudden jumping/explosions
-    const hasIncomingAudio = this.isPlaying && energySum > 0;
-    const dt = hasIncomingAudio ? 0.15 : (isVisualReleasing ? 0.035 : 0.08); // smoothing factor (0 = stuck, 1 = instant jump)
-    
-    this.smoothedData.bass += (oldBass - this.smoothedData.bass) * dt;
-    this.smoothedData.mid += (oldMid - this.smoothedData.mid) * dt;
-    this.smoothedData.treble += (oldTreble - this.smoothedData.treble) * dt;
-    this.smoothedData.energy += (energy - this.smoothedData.energy) * dt;
-    
-    this.smoothedData.subBass += (subBass - this.smoothedData.subBass) * dt;
-    this.smoothedData.lowMid += (lowMid - this.smoothedData.lowMid) * dt;
-    this.smoothedData.highMid += (highMid - this.smoothedData.highMid) * dt;
-    this.smoothedData.presence += (presence - this.smoothedData.presence) * dt;
-    this.smoothedData.brilliance += (brilliance - this.smoothedData.brilliance) * dt;
-    this.smoothedData.air += (air - this.smoothedData.air) * dt;
-    
-    this.smoothedData.warmth += (warmth - this.smoothedData.warmth) * dt;
-    this.smoothedData.brightness += (brightness - this.smoothedData.brightness) * dt;
-    this.smoothedData.sharpness += (sharpness - this.smoothedData.sharpness) * dt;
-    this.smoothedData.smoothness += (smoothnessVal - this.smoothedData.smoothness) * dt;
-    this.smoothedData.density += (density - this.smoothedData.density) * dt;
-    this.smoothedData.spectralCentroid += (spectralCentroid - this.smoothedData.spectralCentroid) * dt;
-
-    return { ...this.smoothedData };
+  // Set idle fade duration
+  public setIdleFadeOutDuration(seconds: number) {
+    this.idleFadeOutDuration = seconds;
   }
 }
 

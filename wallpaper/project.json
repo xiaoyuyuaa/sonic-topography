@@ -26,6 +26,7 @@
 				"value" : "nocturnal",
 				"options" : 
 				[
+					{ "label" : "自动轮询", "value" : "cycle" },
 					{ "label" : "靛蓝紫", "value" : "nocturnal" },
 					{ "label" : "深海蓝", "value" : "ocean-deep" },
 					{ "label" : "冰蓝", "value" : "arctic-aurora" },
@@ -38,10 +39,21 @@
 					{ "label" : "极简黑白", "value" : "minimal-monochrome" }
 				]
 			},
-			"gridSize" : 
+			"themeCycleInterval" : 
 			{
 				"index" : 1,
 				"order" : 101,
+				"text" : "轮询间隔 (秒)",
+				"type" : "slider",
+				"value" : 60,
+				"min" : 10,
+				"max" : 300,
+				"step" : 10
+			},
+			"gridSize" : 
+			{
+				"index" : 3,
+				"order" : 103,
 				"text" : "渲染精度",
 				"type" : "combo",
 				"value" : 160,
@@ -144,6 +156,25 @@
 				"text" : "点击触发流星",
 				"type" : "bool",
 				"value" : true
+			},
+			"peakColorEnabled" : 
+			{
+				"index" : 21,
+				"order" : 121,
+				"text" : "启用强调色",
+				"type" : "bool",
+				"value" : true
+			},
+			"peakColorIntensity" : 
+			{
+				"index" : 22,
+				"order" : 122,
+				"text" : "强调色强度",
+				"type" : "slider",
+				"value" : 1.0,
+				"min" : 0,
+				"max" : 2,
+				"step" : 0.1
 			},
 			"idleWaveEnabled" : 
 			{

@@ -37,7 +37,10 @@ export const MapShaderMaterial = shaderMaterial(
     uWarmCore: new THREE.Color(1.0, 0.2, 0.1),
     uWarmEdge: new THREE.Color(1.0, 0.6, 0.0),
     uRippleColor: new THREE.Color(0.2, 0.9, 1.0),
+    uPeakColor: new THREE.Color(1.0, 1.0, 1.0),
     uGlowIntensity: 1.0,
+    uPeakEnabled: 1.0, // 强调色开关 (0=关闭, 1=开启)
+    uPeakIntensity: 1.0, // 强调色强度 (0-2)
   },
   // vertex shader
   `
@@ -75,6 +78,7 @@ export const MapShaderMaterial = shaderMaterial(
     varying vec3 vNormal;
     varying float vRelativeY;
     varying vec2 vInstancePos;
+    varying float vPeakIntensity; // 峰值强度
 
     // Simplex noise
     vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
@@ -143,6 +147,10 @@ export const MapShaderMaterial = shaderMaterial(
       // Sub-Bass: Center heavy, ultra slow rolling hills, massive block lifts
       float subRegion = smoothstep(uHalfExtent * 0.30 * range, 0.0, centerDist);
       float subLift = easeLift(uSubBass, 6.0) * subRegion;
+      
+      // 峰值强度：基于 subLift 高度，归一化到 0-1
+      // subLift 最大值为 6.0，所以除以 6.0 归一化
+      vPeakIntensity = clamp(subLift / 6.0, 0.0, 1.0);
 
       // Bass: Chunk-based lifts, springy feel
       float bassNoise = snoise(pos2D * 0.1 - vec2(0.0, uTime * 0.2));
@@ -292,7 +300,10 @@ export const MapShaderMaterial = shaderMaterial(
     uniform vec3 uWarmCore;
     uniform vec3 uWarmEdge;
     uniform vec3 uRippleColor;
+    uniform vec3 uPeakColor;
     uniform float uGlowIntensity;
+    uniform float uPeakEnabled; // 强调色开关
+    uniform float uPeakIntensity; // 强调色强度
 
     varying vec2 vUv;
     varying float vElevation;
@@ -301,6 +312,7 @@ export const MapShaderMaterial = shaderMaterial(
     varying vec3 vNormal;
     varying float vRelativeY;
     varying vec2 vInstancePos;
+    varying float vPeakIntensity;
 
     float random(vec2 st) {
       return fract(sin(dot(st.xy, vec2(12.9898,78.233))) * 43758.5453123);
@@ -349,11 +361,18 @@ export const MapShaderMaterial = shaderMaterial(
       currentGlow = mix(currentGlow, uRippleColor, normalBlend * 0.85);
       currentGlow = mix(currentGlow, vec3(1.0, 1.0, 1.0), whiteBlend * 0.9);
       
+      // Peak color - 中间凸起峰值颜色（高阈值触发）
+      float peakBlend = pow(vPeakIntensity, 1.5) * uPeakEnabled * uPeakIntensity;
+      currentGlow = mix(currentGlow, uPeakColor, clamp(peakBlend, 0.0, 1.0) * 0.7); // 发光混合 70%
+      
       vec3 bodyColor = mix(cBase1, cBase2, vRelativeY * distFade);
       vec3 finalColor;
 
       if (isTop) {
          float topIntensity = smoothstep(0.0, 0.4, normElevation);
+
+         // 峰值颜色额外增强顶面
+         topIntensity += clamp(peakBlend * 0.4, 0.0, 1.0);
          
          // Distance falloff for twinkling on flat ground
          float twinkleDistFalloff = smoothstep(60.0, 30.0, centerDist);
@@ -395,12 +414,17 @@ export const MapShaderMaterial = shaderMaterial(
          
          if (normElevation < 0.02) sideGlow = 0.0;
          
-         finalColor = mix(bodyColor, currentGlow, sideGlow * 1.5);
-         
+         // 峰值颜色影响侧面
+         vec3 sideGlowColor = mix(currentGlow, uPeakColor, clamp(peakBlend * 0.4, 0.0, 1.0));
+         finalColor = mix(bodyColor, sideGlowColor, sideGlow * 1.5);
+
          // Top Rim
          float rimGlow = smoothstep(0.03, 0.0, distFromTop) * normElevation;
-         finalColor += currentGlow * rimGlow;
+         finalColor += mix(currentGlow, uPeakColor, clamp(peakBlend * 0.35, 0.0, 1.0)) * rimGlow;
       }
+
+      // 峰值颜色全局叠加
+      finalColor = mix(finalColor, uPeakColor, clamp(peakBlend * 0.15, 0.0, 1.0));
       
       finalColor += uRippleColor * normalBlend * 0.4;
       finalColor += vec3(1.0, 1.0, 1.0) * whiteBlend * 0.7;
