@@ -93,6 +93,9 @@ export class AudioEngine {
   private lastIdleTime: number = 0; // 记录最后一次无音频能量的时间
   private idleEnergyThreshold = 0.02; // 空闲能量阈值，低于此值认为无音频
   private currentIdleIntensity: number = 0; // 当前空闲波纹强度（用于平滑过渡）
+  private lastStateChangeTime: number = 0; // 记录最后一次状态变化的时间
+  private debounceDuration = 1.0; // 防抖时间（秒）
+  private lastHasEnergy: boolean = false; // 上一次的能量状态
   
   private beatThreshold = 0.4;
   private beatDecay = 0.95;
@@ -262,50 +265,65 @@ export class AudioEngine {
     this.idleStartTime = performance.now(); // 记录空闲开始时间
   }
 
-  // 计算空闲波纹强度：音频播放时为0，停止超过配置时间后平滑过渡到1
-  // Wallpaper Engine 模式下基于音频能量判断，普通模式基于 isPlaying
-  // 使用 currentIdleIntensity 实现平滑过渡
+  // 计算空闲波纹强度
+  // 有能量 → 过渡到0
+  // 无能量 → 过渡到1
+  // 防抖机制：状态变化后1秒内又变回原状态，则不执行切换
   public getIdleWaveIntensity(): number {
     const now = performance.now();
-    let targetIntensity = 0;
+    let targetIntensity = 1; // 默认无能量，显示空闲波浪
     
     // Wallpaper Engine 模式：基于音频能量判断
     if (this.wallpaperAudioReceived) {
-      const elapsed = (now - this.lastActiveTime) / 1000;
-      if (elapsed >= this.idleTransitionDuration) {
-        targetIntensity = 1;
+      // 判断当前是否有能量
+      const hasEnergy = this.lastActiveTime > this.lastIdleTime;
+      
+      // 防抖逻辑：检测状态变化
+      if (hasEnergy !== this.lastHasEnergy) {
+        // 状态发生变化，记录时间
+        this.lastStateChangeTime = now;
+        this.lastHasEnergy = hasEnergy;
+      }
+      
+      // 检查是否超过防抖时间
+      const debounceElapsed = (now - this.lastStateChangeTime) / 1000;
+      if (debounceElapsed >= this.debounceDuration) {
+        // 超过防抖时间，执行状态切换
+        if (hasEnergy) {
+          targetIntensity = 0; // 有能量，隐藏空闲波浪
+        }
       }
     } else {
       // 普通模式：基于 isPlaying 状态
-      if (!this.isPlaying && this.idleStartTime !== 0) {
-        const elapsed = (now - this.idleStartTime) / 1000;
-        if (elapsed >= this.idleTransitionDuration) {
-          targetIntensity = 1;
-        }
+      if (this.isPlaying) {
+        targetIntensity = 0;
       }
     }
     
     // 平滑过渡：根据目标值渐变
-    const fadeSpeed = targetIntensity > this.currentIdleIntensity 
-      ? 1.0 / this.idleFadeOutDuration  // 进入空闲的速度
-      : 3.0 / this.idleFadeOutDuration;  // 退出空闲的速度（更快）
-    
+    const fadeSpeed = 1.0 / this.idleFadeOutDuration;
     const delta = fadeSpeed * 0.016; // 约60fps
+    
     if (targetIntensity > this.currentIdleIntensity) {
       this.currentIdleIntensity = Math.min(targetIntensity, this.currentIdleIntensity + delta);
-    } else {
+    } else if (targetIntensity < this.currentIdleIntensity) {
       this.currentIdleIntensity = Math.max(targetIntensity, this.currentIdleIntensity - delta);
     }
     
     return this.currentIdleIntensity;
   }
 
-  // 设置空闲波纹等待时间
+  // 设置空闲等待时间（已废弃，保留兼容）
   public setIdleWaveDelay(seconds: number) {
     this.idleTransitionDuration = seconds;
   }
 
-  // 设置退出空闲过渡时间
+  // 设置防抖时间
+  public setIdleWaveDebounce(seconds: number) {
+    this.debounceDuration = seconds;
+  }
+
+  // 设置空闲过渡时间
   public setIdleFadeOutDuration(seconds: number) {
     this.idleFadeOutDuration = seconds;
   }
@@ -412,6 +430,13 @@ export class AudioEngine {
 
   // Set audio data from Wallpaper Engine callback
   public setWallpaperAudioData(audioData: number[]) {
+    // First time initialization - start in active state (noise = 0)
+    if (!this.wallpaperAudioReceived) {
+      this.lastActiveTime = performance.now();
+      this.lastIdleTime = 0; // 设为0，表示从未进入空闲
+      this.lastHasEnergy = true; // 启动时默认有能量
+      this.lastStateChangeTime = performance.now();
+    }
     this.wallpaperAudioReceived = true;
     // Wallpaper Engine provides 128 bins, expand to 512 by interpolation
     const inputBins = audioData.length || 128;
@@ -497,9 +522,11 @@ export class AudioEngine {
 
     const energy = energySum / binCount;
     
-    // Update last active time when audio energy is detected
+    // Update last active/idle time based on audio energy
     if (energy > this.idleEnergyThreshold) {
       this.lastActiveTime = performance.now();
+    } else {
+      this.lastIdleTime = performance.now();
     }
     
     // Evaluate triggers directly (no debounce needed)
@@ -643,9 +670,11 @@ export class AudioEngine {
 
     const energy = energySum / binCount;
     
-    // Update last active time when audio energy is detected (普通模式)
+    // Update last active/idle time based on audio energy (普通模式)
     if (this.isPlaying && energy > this.idleEnergyThreshold) {
       this.lastActiveTime = performance.now();
+    } else {
+      this.lastIdleTime = performance.now();
     }
     
     // Average amplitudes per band (updated bin counts)

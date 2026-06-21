@@ -18,8 +18,8 @@ interface WallpaperProperties {
   responseRange?: PropertyValue;
   gridSize?: PropertyValue;
   idleWaveEnabled?: PropertyValue;
-  idleWaveDelay?: PropertyValue;
-  idleWaveFadeOut?: PropertyValue;
+  idleWaveDebounce?: PropertyValue;
+  idleWaveFadeDuration?: PropertyValue;
   autoRotateSpeed?: PropertyValue;
   cameraDistance?: PropertyValue;
   cameraAngleX?: PropertyValue;
@@ -45,7 +45,6 @@ function WallpaperApp() {
   const [cameraAngleX, setCameraAngleX] = useState(120);
   const [cameraAngleY, setCameraAngleY] = useState(25);
   const [idleWaveEnabled, setIdleWaveEnabled] = useState(true);
-  const [idleWaveDelay, setIdleWaveDelay] = useState(3);
   const [showPlayerController, setShowPlayerController] = useState(true);
   const [showAlbumCover, setShowAlbumCover] = useState(true);
   const [controllerSize, setControllerSize] = useState<'small' | 'medium' | 'large'>('large');
@@ -77,14 +76,11 @@ function WallpaperApp() {
     if (properties.idleWaveEnabled?.value !== undefined) {
       setIdleWaveEnabled(properties.idleWaveEnabled.value as boolean);
     }
-    if (properties.idleWaveDelay?.value !== undefined) {
-      const delay = properties.idleWaveDelay.value as number;
-      setIdleWaveDelay(delay);
-      engine.setIdleWaveDelay(delay);
+    if (properties.idleWaveDebounce?.value !== undefined) {
+      engine.setIdleWaveDebounce(properties.idleWaveDebounce.value as number);
     }
-    if (properties.idleWaveFadeOut?.value !== undefined) {
-      const fadeOut = properties.idleWaveFadeOut.value as number;
-      engine.setIdleFadeOutDuration(fadeOut);
+    if (properties.idleWaveFadeDuration?.value !== undefined) {
+      engine.setIdleFadeOutDuration(properties.idleWaveFadeDuration.value as number);
     }
     if (properties.autoRotateSpeed?.value !== undefined) {
       setAutoRotateSpeed(properties.autoRotateSpeed.value as number);

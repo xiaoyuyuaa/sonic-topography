@@ -136,7 +136,7 @@ export const MapScene = forwardRef<MapSceneHandle, MapSceneProps>(({ theme = 'no
 
      const idx = meteorIndex.current;
      const angle = Math.random() * Math.PI * 2;
-     const dist = Math.random() * 25;
+     const dist = 10 + Math.random() * 35;
      
      const m = meteorsRef.current[idx];
      m.active = true;
@@ -162,12 +162,11 @@ export const MapScene = forwardRef<MapSceneHandle, MapSceneProps>(({ theme = 'no
        } else {
           const now = performance.now();
 
-          // Start a new cluster when: first time, gap > 1.5s, or 5~13 hits exhausted
           if (!pulseAnchorRef.current.initialized || 
               (now - pulseAnchorRef.current.lastTriggerTime) > PULSE_ANCHOR_EXPIRE_MS ||
               pulseAnchorRef.current.hitsRemaining <= 0) {
-             pulseAnchorRef.current.x = (Math.random() - 0.5) * 30;
-             pulseAnchorRef.current.z = (Math.random() - 0.5) * 30;
+             pulseAnchorRef.current.x = (Math.random() - 0.5) * 50;
+             pulseAnchorRef.current.z = (Math.random() - 0.5) * 50;
              pulseAnchorRef.current.hitsRemaining = 5 + Math.floor(Math.random() * 9);
              pulseAnchorRef.current.initialized = true;
           }
@@ -176,13 +175,11 @@ export const MapScene = forwardRef<MapSceneHandle, MapSceneProps>(({ theme = 'no
 
           let rx: number, rz: number;
           if (mode === 'Kick') {
-             // Cluster near anchor with small jitter for dense beats
-             rx = pulseAnchorRef.current.x + (Math.random() - 0.5) * 4;
-             rz = pulseAnchorRef.current.z + (Math.random() - 0.5) * 4;
+             rx = pulseAnchorRef.current.x + (Math.random() - 0.5) * 8;
+             rz = pulseAnchorRef.current.z + (Math.random() - 0.5) * 8;
           } else {
-             // Advanced mode: wider spread
              const angle = Math.random() * Math.PI * 2;
-             const dist = 10 + Math.random() * 25;
+             const dist = 15 + Math.random() * 45;
              rx = Math.cos(angle) * dist;
              rz = Math.sin(angle) * dist;
           }
