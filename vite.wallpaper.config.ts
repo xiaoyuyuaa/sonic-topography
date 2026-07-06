@@ -2,12 +2,21 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import { defineConfig } from 'vite';
-import { copyFileSync, renameSync, existsSync, readdirSync, rmdirSync, readFileSync, writeFileSync } from 'fs';
+import { copyFileSync, renameSync, existsSync, readdirSync, rmdirSync, readFileSync, writeFileSync, rmSync } from 'fs';
 
 export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
+    {
+      name: 'clean-dist-wallpaper',
+      buildStart() {
+        const distDir = path.resolve(__dirname, 'dist-wallpaper');
+        if (existsSync(distDir)) {
+          rmSync(distDir, { recursive: true, force: true });
+        }
+      },
+    },
     {
       name: 'copy-wallpaper-assets',
       closeBundle() {

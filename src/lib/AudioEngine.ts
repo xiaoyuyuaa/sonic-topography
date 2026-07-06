@@ -74,9 +74,8 @@ export class AudioEngine {
   private lastIdleTime: number = 0;
   private idleEnergyThreshold = 0.02;
   private currentIdleIntensity: number = 0;
-  private lastStateChangeTime: number = 0;
   private debounceDuration = 1.0;
-  private lastHasEnergy: boolean = false;
+  private idleStartTime: number = 0; // 0 = 非空闲，>0 = 开始进入空闲的时间戳
 
   private prevData: number[] = new Array(512).fill(0);
   private prevBrightness: number = 0;
@@ -96,7 +95,7 @@ export class AudioEngine {
 
   public onFreqTrigger?: (strength: number, type: 'Kick' | 'Snare' | 'Advanced', action: 'Pulse' | 'Meteor') => void;
 
-  private evaluateTrigger(config: TriggerConfig, fluxScore: number, wallpaperData: number[]) {
+  private evaluateTrigger(config: TriggerConfig, fluxScore: number, wallpaperData: number[], deltaTime: number = 0.016) {
       if (!config.enabled) return;
 
       const binCount = 512;
@@ -126,7 +125,9 @@ export class AudioEngine {
           }
       }
 
-      if (config.currentCooldown > 0) config.currentCooldown--;
+      // 帧率无关冷却递减（参考 60fps）
+      if (config.currentCooldown > 0) config.currentCooldown -= deltaTime * 60;
+      if (config.currentCooldown < 0) config.currentCooldown = 0;
 
       // Auto Beat Evaluation
       if (config.mode === 'Auto Beat') {
@@ -150,7 +151,7 @@ export class AudioEngine {
          const isPeak = config.prevSmoothedFlux > adaptiveThreshold && config.prevSmoothedFlux >= config.smoothedFlux;
 
          if (config.beatHold > 0) {
-            config.beatHold--;
+            config.beatHold -= deltaTime * 60;
          } else if (isPeak && config.prevSmoothedFlux - config.smoothedFlux > 0.0001) {
             if (this.onFreqTrigger) this.onFreqTrigger(config.prevSmoothedFlux * 2.2 * config.pulseStrength, 'Kick', config.action);
             config.beatHold = config.cooldown;
@@ -173,8 +174,6 @@ export class AudioEngine {
     if (!this.wallpaperAudioReceived) {
       this.lastActiveTime = performance.now();
       this.lastIdleTime = 0;
-      this.lastHasEnergy = true;
-      this.lastStateChangeTime = performance.now();
     }
     this.wallpaperAudioReceived = true;
     // Wallpaper Engine provides 128 bins, expand to 512 by interpolation
@@ -190,7 +189,7 @@ export class AudioEngine {
     return this.wallpaperAudioData;
   }
 
-  public getAudioData(): AudioData {
+  public getAudioData(deltaTime: number = 0.016): AudioData {
     const wallpaperData = this.getWallpaperAudioData();
     const binCount = wallpaperData.length || 512;
 
@@ -251,8 +250,8 @@ export class AudioEngine {
     }
 
     // Evaluate triggers
-    this.evaluateTrigger(this.pulseTrigger, fluxPulse, wallpaperData);
-    this.evaluateTrigger(this.meteorTrigger, fluxMeteor, wallpaperData);
+    this.evaluateTrigger(this.pulseTrigger, fluxPulse, wallpaperData, deltaTime);
+    this.evaluateTrigger(this.meteorTrigger, fluxMeteor, wallpaperData, deltaTime);
 
     // Average amplitudes per band
     const subBass = subBassSum / 5;
@@ -292,8 +291,9 @@ export class AudioEngine {
 
     const spectralCentroid = centroidDen > 0 ? centroidNum / centroidDen : 0;
 
-    // Apply smoothing
-    const dt = energySum > 0 ? 0.15 : 0.08;
+    // 帧率无关的平滑系数（参考 60fps）
+    const baseFactor = energySum > 0 ? 0.15 : 0.08;
+    const dt = 1 - Math.pow(1 - baseFactor, deltaTime * 60);
 
     this.smoothedData.bass += (oldBass - this.smoothedData.bass) * dt;
     this.smoothedData.mid += (oldMid - this.smoothedData.mid) * dt;
@@ -318,29 +318,32 @@ export class AudioEngine {
   }
 
   // Calculate idle wave intensity
-  public getIdleWaveIntensity(): number {
+  public getIdleWaveIntensity(deltaTime: number = 0.016): number {
     const now = performance.now();
-    let targetIntensity = 1;
+    let targetIntensity: number;
 
     if (this.wallpaperAudioReceived) {
       const hasEnergy = this.lastActiveTime > this.lastIdleTime;
 
-      if (hasEnergy !== this.lastHasEnergy) {
-        this.lastStateChangeTime = now;
-        this.lastHasEnergy = hasEnergy;
-      }
-
-      const debounceElapsed = (now - this.lastStateChangeTime) / 1000;
-      if (debounceElapsed >= this.debounceDuration) {
-        if (hasEnergy) {
-          targetIntensity = 0;
+      if (hasEnergy) {
+        // 有能量 → 立即停止空闲波浪，重置空闲计时
+        targetIntensity = 0;
+        this.idleStartTime = 0;
+      } else {
+        // 无能量 → 需持续超过防抖时间才进入空闲
+        if (this.idleStartTime === 0) {
+          this.idleStartTime = now;
         }
+        const idleElapsed = (now - this.idleStartTime) / 1000;
+        targetIntensity = idleElapsed >= this.debounceDuration ? 1 : 0;
       }
+    } else {
+      targetIntensity = this.isPlaying ? 0 : 1;
     }
 
     // Smooth transition
     const fadeSpeed = 1.0 / this.idleFadeOutDuration;
-    const delta = fadeSpeed * 0.016;
+    const delta = fadeSpeed * deltaTime;
 
     if (targetIntensity > this.currentIdleIntensity) {
       this.currentIdleIntensity = Math.min(targetIntensity, this.currentIdleIntensity + delta);

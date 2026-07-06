@@ -1,39 +1,34 @@
 @echo off
-setlocal enabledelayedexpansion
-
-set SOURCE=%~dp0dist-wallpaper
-set TARGET=E:\STEAM\steamapps\common\wallpaper_engine\projects\myprojects\index
+chcp 65001 > nul
+setlocal
 
 echo ========================================
-echo  Sonic Topography - 壁纸部署脚本
+echo   音域回响壁纸部署脚本
 echo ========================================
-echo.
-echo  源路径: %SOURCE%
-echo  目标路径: %TARGET%
-echo.
 
-if not exist "%SOURCE%" (
-    echo [错误] 源目录不存在！请先运行 npm run build:wallpaper
+:: 设置 Wallpaper Engine 项目目录
+set WE_PROJECT_DIR=E:\STEAM\steamapps\common\wallpaper_engine\projects\myprojects\sonic-topography
+
+:: 检查 dist-wallpaper 目录是否存在
+if not exist "dist-wallpaper" (
+    echo [错误] dist-wallpaper 目录不存在，请先运行 pnpm build
     pause
     exit /b 1
 )
 
-if not exist "%TARGET%" (
-    echo [提示] 目标目录不存在，正在创建...
-    mkdir "%TARGET%"
+:: 创建目标目录（如果不存在）
+if not exist "%WE_PROJECT_DIR%" (
+    mkdir "%WE_PROJECT_DIR%"
 )
 
-echo [步骤 1/2] 清除旧文件...
-if exist "%TARGET%\*" (
-    del /f /s /q "%TARGET%\*" >nul 2>&1
-    for /d %%d in ("%TARGET%\*") do rmdir /s /q "%%d"
-)
-
-echo [步骤 2/2] 复制新文件...
-xcopy "%SOURCE%\*" "%TARGET%\" /e /h /q
+:: 使用 PowerShell Copy-Item 复制所有文件
+echo 正在复制文件到 Wallpaper Engine 项目目录...
+powershell -Command "Copy-Item -Path 'dist-wallpaper\*' -Destination '%WE_PROJECT_DIR%' -Recurse -Force"
 
 echo.
 echo [完成] 壁纸已部署到:
-echo   %TARGET%
+echo %WE_PROJECT_DIR%
 echo.
+echo 请在 Wallpaper Engine 中刷新项目列表查看效果。
+echo ========================================
 pause

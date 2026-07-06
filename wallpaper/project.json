@@ -8,23 +8,25 @@
 	"file" : "index.html",
 	"general" : 
 	{
-		"properties" : 
+		"properties" :
 		{
-			"schemecolor" : 
+			"schemecolor" :
 			{
 				"order" : 0,
 				"text" : "ui_browse_properties_scheme_color",
 				"type" : "color",
 				"value" : "0.3333333333333333 0.0196078431372549 0.3333333333333333"
 			},
-			"theme" : 
+
+			/* ====== 外观 ====== */
+			"theme" :
 			{
 				"index" : 0,
 				"order" : 100,
 				"text" : "颜色主题",
 				"type" : "combo",
 				"value" : "nocturnal",
-				"options" : 
+				"options" :
 				[
 					{ "label" : "自动轮询", "value" : "cycle" },
 					{ "label" : "靛蓝紫", "value" : "nocturnal" },
@@ -39,7 +41,7 @@
 					{ "label" : "极简黑白", "value" : "minimal-monochrome" }
 				]
 			},
-			"themeCycleInterval" : 
+			"themeCycleInterval" :
 			{
 				"index" : 1,
 				"order" : 101,
@@ -50,125 +52,18 @@
 				"max" : 300,
 				"step" : 10
 			},
-			"gridSize" : 
-			{
-				"index" : 3,
-				"order" : 103,
-				"text" : "渲染精度",
-				"type" : "combo",
-				"value" : 160,
-				"options" : 
-				[
-					{ "label" : "低 (80×80)", "value" : 80 },
-					{ "label" : "中低 (120×120)", "value" : 120 },
-					{ "label" : "标准 (160×160)", "value" : 160 },
-					{ "label" : "中高 (200×200)", "value" : 200 },
-					{ "label" : "高 (240×240)", "value" : 240 },
-					{ "label" : "超高 (320×320)", "value" : 320 }
-				]
-			},
-			"audioIntensity" : 
+			"peakColorEnabled" :
 			{
 				"index" : 2,
 				"order" : 102,
-				"text" : "音频响应强度",
-				"type" : "slider",
-				"value" : 1,
-				"min" : 0.3,
-				"max" : 2.5,
-				"step" : 0.1
-			},
-			"responseRange" : 
-			{
-				"index" : 3,
-				"order" : 103,
-				"text" : "响应范围",
-				"type" : "slider",
-				"value" : 1,
-				"min" : 0.3,
-				"max" : 2,
-				"step" : 0.1
-			},
-			"pulseEnabled" : 
-			{
-				"index" : 4,
-				"order" : 104,
-				"text" : "启用波纹",
-				"type" : "bool",
-				"value" : true
-			},
-			"pulseSensitivity" : 
-			{
-				"index" : 5,
-				"order" : 105,
-				"text" : "波纹灵敏度",
-				"type" : "slider",
-				"value" : 0.2,
-				"min" : 0.05,
-				"max" : 0.5,
-				"step" : 0.01
-			},
-			"pulseCooldown" : 
-			{
-				"index" : 6,
-				"order" : 106,
-				"text" : "波纹冷却 (帧)",
-				"type" : "slider",
-				"value" : 0,
-				"min" : 0,
-				"max" : 200,
-				"step" : 5
-			},
-			"meteorEnabled" : 
-			{
-				"index" : 7,
-				"order" : 107,
-				"text" : "启用流星",
-				"type" : "bool",
-				"value" : true
-			},
-			"meteorSensitivity" : 
-			{
-				"index" : 8,
-				"order" : 108,
-				"text" : "流星灵敏度",
-				"type" : "slider",
-				"value" : 0.35,
-				"min" : 0.1,
-				"max" : 0.8,
-				"step" : 0.05
-			},
-			"meteorCooldown" : 
-			{
-				"index" : 9,
-				"order" : 109,
-				"text" : "流星冷却 (帧)",
-				"type" : "slider",
-				"value" : 60,
-				"min" : 0,
-				"max" : 400,
-				"step" : 10
-			},
-			"meteorClickEnabled" : 
-			{
-				"index" : 10,
-				"order" : 110,
-				"text" : "点击触发流星",
-				"type" : "bool",
-				"value" : true
-			},
-			"peakColorEnabled" : 
-			{
-				"index" : 21,
-				"order" : 121,
 				"text" : "启用强调色",
 				"type" : "bool",
 				"value" : true
 			},
-			"peakColorIntensity" : 
+			"peakColorIntensity" :
 			{
-				"index" : 22,
-				"order" : 122,
+				"index" : 3,
+				"order" : 103,
 				"text" : "强调色强度",
 				"type" : "slider",
 				"value" : 1.0,
@@ -176,18 +71,133 @@
 				"max" : 2,
 				"step" : 0.1
 			},
-			"idleWaveEnabled" : 
+
+			/* ====== 渲染 ====== */
+			"gridSize" :
+			{
+				"index" : 4,
+				"order" : 104,
+				"text" : "渲染精度",
+				"type" : "combo",
+				"value" : 160,
+				"options" :
+				[
+					{ "label" : "低 (120x120)", "value" : 120 },
+					{ "label" : "标准 (160x160)", "value" : 160 },
+					{ "label" : "高 (320x320)", "value" : 320 },
+					{ "label" : "超高 (640x640)", "value" : 640 },
+					{ "label" : "极高 (1080x1080)", "value" : 1080 },
+					{ "label" : "抽象 (4096x4096)", "value" : 4096 }
+				]
+			},
+			"audioIntensity" :
+			{
+				"index" : 5,
+				"order" : 105,
+				"text" : "音频响应强度",
+				"type" : "slider",
+				"value" : 1,
+				"min" : 0.3,
+				"max" : 2.5,
+				"step" : 0.1
+			},
+			"responseRange" :
+			{
+				"index" : 6,
+				"order" : 106,
+				"text" : "响应范围",
+				"type" : "slider",
+				"value" : 1,
+				"min" : 0.3,
+				"max" : 2,
+				"step" : 0.1
+			},
+
+			/* ====== 效果 - 波纹 ====== */
+			"pulseEnabled" :
+			{
+				"index" : 7,
+				"order" : 107,
+				"text" : "启用波纹",
+				"type" : "bool",
+				"value" : true
+			},
+			"pulseSensitivity" :
+			{
+				"index" : 8,
+				"order" : 108,
+				"text" : "波纹灵敏度",
+				"type" : "slider",
+				"value" : 0.2,
+				"min" : 0.05,
+				"max" : 0.5,
+				"step" : 0.01
+			},
+			"pulseCooldown" :
+			{
+				"index" : 9,
+				"order" : 109,
+				"text" : "波纹冷却 (帧)",
+				"type" : "slider",
+				"value" : 0,
+				"min" : 0,
+				"max" : 200,
+				"step" : 5
+			},
+
+			/* ====== 效果 - 流星 ====== */
+			"meteorEnabled" :
+			{
+				"index" : 10,
+				"order" : 110,
+				"text" : "启用流星",
+				"type" : "bool",
+				"value" : true
+			},
+			"meteorSensitivity" :
 			{
 				"index" : 11,
 				"order" : 111,
+				"text" : "流星灵敏度",
+				"type" : "slider",
+				"value" : 0.35,
+				"min" : 0.1,
+				"max" : 0.8,
+				"step" : 0.05
+			},
+			"meteorCooldown" :
+			{
+				"index" : 12,
+				"order" : 112,
+				"text" : "流星冷却 (帧)",
+				"type" : "slider",
+				"value" : 60,
+				"min" : 0,
+				"max" : 400,
+				"step" : 10
+			},
+			"meteorClickEnabled" :
+			{
+				"index" : 13,
+				"order" : 113,
+				"text" : "点击触发流星",
+				"type" : "bool",
+				"value" : true
+			},
+
+			/* ====== 效果 - 空闲波浪 ====== */
+			"idleWaveEnabled" :
+			{
+				"index" : 14,
+				"order" : 114,
 				"text" : "空闲波浪",
 				"type" : "bool",
 				"value" : true
 			},
-			"idleWaveDebounce" : 
+			"idleWaveDebounce" :
 			{
-				"index" : 12,
-				"order" : 112,
+				"index" : 15,
+				"order" : 115,
 				"text" : "空闲波浪防抖 (秒)",
 				"type" : "slider",
 				"value" : 1,
@@ -195,10 +205,10 @@
 				"max" : 5,
 				"step" : 0.5
 			},
-			"idleWaveFadeDuration" : 
+			"idleWaveFadeDuration" :
 			{
-				"index" : 13,
-				"order" : 113,
+				"index" : 16,
+				"order" : 116,
 				"text" : "空闲波浪过渡 (秒)",
 				"type" : "slider",
 				"value" : 1,
@@ -206,10 +216,12 @@
 				"max" : 5,
 				"step" : 0.5
 			},
-			"cameraDistance" : 
+
+			/* ====== 视角 ====== */
+			"cameraDistance" :
 			{
-				"index" : 14,
-				"order" : 114,
+				"index" : 17,
+				"order" : 117,
 				"text" : "视角距离",
 				"type" : "slider",
 				"value" : 85,
@@ -217,10 +229,29 @@
 				"max" : 100,
 				"step" : 5
 			},
-			"cameraAngleX" : 
+			"autoRotateEnabled" :
 			{
-				"index" : 15,
-				"order" : 115,
+				"index" : 18,
+				"order" : 118,
+				"text" : "自动旋转",
+				"type" : "bool",
+				"value" : false
+			},
+			"autoRotateSpeed" :
+			{
+				"index" : 19,
+				"order" : 119,
+				"text" : "旋转速度",
+				"type" : "slider",
+				"value" : 10,
+				"min" : 1,
+				"max" : 60,
+				"step" : 1
+			},
+			"cameraAngleX" :
+			{
+				"index" : 20,
+				"order" : 120,
 				"text" : "水平角度",
 				"type" : "slider",
 				"value" : 120,
@@ -228,10 +259,10 @@
 				"max" : 360,
 				"step" : 5
 			},
-			"cameraAngleY" : 
+			"cameraAngleY" :
 			{
-				"index" : 16,
-				"order" : 116,
+				"index" : 21,
+				"order" : 121,
 				"text" : "垂直仰角",
 				"type" : "slider",
 				"value" : 25,
@@ -239,46 +270,59 @@
 				"max" : 70,
 				"step" : 5
 			},
-			"autoRotateSpeed" : 
+
+			/* ====== 播放器 ====== */
+			"showPlayerController" :
 			{
-				"index" : 17,
-				"order" : 117,
-				"text" : "自动旋转速度",
-				"type" : "slider",
-				"value" : 0,
-				"min" : 0,
-				"max" : 2,
-				"step" : 0.1
-			},
-			"showPlayerController" : 
-			{
-				"index" : 18,
-				"order" : 118,
+				"index" : 22,
+				"order" : 122,
 				"text" : "显示播放器控制器",
 				"type" : "bool",
 				"value" : true
 			},
-			"showAlbumCover" : 
+			"showAlbumCover" :
 			{
-				"index" : 19,
-				"order" : 119,
+				"index" : 23,
+				"order" : 123,
 				"text" : "显示专辑封面",
 				"type" : "bool",
 				"value" : true
 			},
-			"controllerSize" : 
+			"controllerSize" :
 			{
-				"index" : 20,
-				"order" : 120,
+				"index" : 24,
+				"order" : 124,
 				"text" : "控制器尺寸",
 				"type" : "combo",
 				"value" : "large",
-				"options" : 
+				"options" :
 				[
 					{ "label" : "小 (紧凑)", "value" : "small" },
 					{ "label" : "中 (均衡)", "value" : "medium" },
 					{ "label" : "大 (醒目)", "value" : "large" }
 				]
+			},
+			"controllerX" :
+			{
+				"index" : 25,
+				"order" : 125,
+				"text" : "控制器水平位置 (%)",
+				"type" : "slider",
+				"value" : 2,
+				"min" : 0,
+				"max" : 80,
+				"step" : 1
+			},
+			"controllerY" :
+			{
+				"index" : 26,
+				"order" : 126,
+				"text" : "控制器垂直位置 (%)",
+				"type" : "slider",
+				"value" : 3,
+				"min" : 0,
+				"max" : 90,
+				"step" : 1
 			}
 		},
 		"supportsaudioprocessing" : true

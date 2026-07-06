@@ -1,74 +1,100 @@
 import { StrictMode, useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { createRoot } from 'react-dom/client';
-import { Canvas } from '@react-three/fiber';
+import { Canvas, useThree } from '@react-three/fiber';
+import * as THREE from 'three';
 import { MapScene } from '../src/components/AudioVisualizer/MapScene';
 import { themes, themeIds, lerpThemes, ThemeColors } from '../src/lib/themes';
 import { engine } from '../src/lib/AudioEngine';
 import '../src/index.css';
 
-/* Wallpaper Engine 属性监听回调的 properties 对象结构 */
+/* Wallpaper Engine 属性监听 - 模块级别缓存，解决加载时序问题 */
+let _pendingProps: WallpaperProperties | null = null;
+let _pendingGeneralProps: GeneralProperties | null = null;
+let _applyProps: ((props: WallpaperProperties) => void) | null = null;
+let _applyGeneralProps: ((props: GeneralProperties) => void) | null = null;
+
 interface PropertyValue {
   value: string | number | boolean;
 }
 
 interface WallpaperProperties {
-  theme?: PropertyValue;
-  audioIntensity?: PropertyValue;
-  responseRange?: PropertyValue;
-  gridSize?: PropertyValue;
-  idleWaveEnabled?: PropertyValue;
-  idleWaveDebounce?: PropertyValue;
-  idleWaveFadeDuration?: PropertyValue;
-  autoRotateSpeed?: PropertyValue;
-  cameraDistance?: PropertyValue;
-  cameraAngleX?: PropertyValue;
-  cameraAngleY?: PropertyValue;
-  pulseEnabled?: PropertyValue;
-  pulseSensitivity?: PropertyValue;
-  pulseCooldown?: PropertyValue;
-  meteorEnabled?: PropertyValue;
-  meteorSensitivity?: PropertyValue;
-  meteorCooldown?: PropertyValue;
-  meteorClickEnabled?: PropertyValue;
-  showPlayerController?: PropertyValue;
-  showAlbumCover?: PropertyValue;
-  controllerSize?: PropertyValue;
-  themeCycleInterval?: PropertyValue;
+  [key: string]: PropertyValue;
 }
 
-/* Media Integration 状态接口 */
-interface MediaState {
-  title: string;
-  artist: string;
-  thumbnail: string;
-  primaryColor: string;
-  textColor: string;
-  isPlaying: boolean;
-  position: number;
-  duration: number;
+interface GeneralProperties {
+  fps?: number;
 }
 
-// 扩展 Window 接口
-declare global {
-  interface Window {
-    __mediaState: MediaState & { _callbacks: ((state: MediaState) => void)[] };
-    __notifyMediaChange: () => void;
+// 立即注册监听器，确保不丢失 Wallpaper Engine 的初始属性调用
+(window as any).wallpaperPropertyListener = {
+  applyUserProperties: (props: WallpaperProperties) => {
+    if (_applyProps) {
+      _applyProps(props); // 组件已挂载，直接应用
+    } else {
+      _pendingProps = { ...(_pendingProps || {}), ...props }; // 组件未挂载，缓存
+    }
+  },
+  applyGeneralProperties: (props: GeneralProperties) => {
+    if (_applyGeneralProps) {
+      _applyGeneralProps(props);
+    } else {
+      _pendingGeneralProps = { ...(_pendingGeneralProps || {}), ...props };
+    }
   }
+};
+
+/* FPS 限制器组件 - demand 模式 + setTimeout 精确控制 */
+function FPSLimiter({ fpsLimit }: { fpsLimit: number }) {
+  const { invalidate } = useThree();
+
+  useEffect(() => {
+    let timerId: number;
+
+    if (fpsLimit <= 0) {
+      // 无限制，持续触发渲染
+      const loop = () => {
+        invalidate();
+        timerId = requestAnimationFrame(loop);
+      };
+      timerId = requestAnimationFrame(loop);
+    } else {
+      // 限制帧率，用 setTimeout 精确控制
+      const interval = 1000 / fpsLimit;
+      const loop = () => {
+        invalidate();
+        timerId = window.setTimeout(loop, interval);
+      };
+      timerId = window.setTimeout(loop, interval);
+    }
+
+    return () => {
+      if (fpsLimit <= 0) cancelAnimationFrame(timerId);
+      else clearTimeout(timerId);
+    };
+  }, [fpsLimit, invalidate]);
+
+  return null;
 }
 
 function WallpaperApp() {
   const defaultCameraDistance = 85;
 
+  // Wallpaper Engine FPS 限制
+  const [fpsLimit, setFpsLimit] = useState(0); // 0 表示无限制
+
   const [themeMode, setThemeMode] = useState<'cycle' | string>('nocturnal'); // 'cycle' 或具体主题名
-  const [autoRotateSpeed, setAutoRotateSpeed] = useState(0);
   const [cameraDistance, setCameraDistance] = useState(defaultCameraDistance);
   const [cameraAngleX, setCameraAngleX] = useState(120);
   const [cameraAngleY, setCameraAngleY] = useState(25);
+  const [autoRotateEnabled, setAutoRotateEnabled] = useState(false);
+  const [autoRotateSpeed, setAutoRotateSpeed] = useState(10);
   const [idleWaveEnabled, setIdleWaveEnabled] = useState(true);
   const [showPlayerController, setShowPlayerController] = useState(true);
   const [showAlbumCover, setShowAlbumCover] = useState(true);
   const [controllerSize, setControllerSize] = useState<'small' | 'medium' | 'large'>('large');
+  const [controllerX, setControllerX] = useState(2); // 控制器水平位置 (%)
+  const [controllerY, setControllerY] = useState(3); // 控制器垂直位置 (%)
   const [audioIntensity, setAudioIntensity] = useState(1);
   const [responseRange, setResponseRange] = useState(1);
   const [gridSize, setGridSize] = useState(160);
@@ -84,19 +110,19 @@ function WallpaperApp() {
   const currentThemeIndexRef = useRef(0); // 当前主题索引
 
   /* Wallpaper Engine Media Integration 状态 - 从全局读取初始值 */
-  const getInitialMediaState = () => window.__mediaState || {
-    title: '', artist: '', thumbnail: '', primaryColor: '', textColor: '', isPlaying: false, position: 0, duration: 0
-  };
-  const initialMedia = getInitialMediaState();
+const getInitialMediaState = () => window.__mediaState || {
+  title: '', artist: '', thumbnail: '', primaryColor: '', textColor: '', isPlaying: false, position: 0, duration: 0
+};
+const initialMedia = getInitialMediaState();
 
-  const [mediaTitle, setMediaTitle] = useState(initialMedia.title);
-  const [mediaArtist, setMediaArtist] = useState(initialMedia.artist);
-  const [mediaThumbnail, setMediaThumbnail] = useState(initialMedia.thumbnail);
-  const [primaryColor, setPrimaryColor] = useState(initialMedia.primaryColor);
-  const [textColor, setTextColor] = useState(initialMedia.textColor);
-  const [isMediaPlaying, setIsMediaPlaying] = useState(initialMedia.isPlaying);
-  const [mediaPosition, setMediaPosition] = useState(initialMedia.position);
-  const [mediaDuration, setMediaDuration] = useState(initialMedia.duration);
+const [mediaTitle, setMediaTitle] = useState(initialMedia.title);
+const [mediaArtist, setMediaArtist] = useState(initialMedia.artist);
+const [mediaThumbnail, setMediaThumbnail] = useState(initialMedia.thumbnail);
+const [primaryColor, setPrimaryColor] = useState(initialMedia.primaryColor);
+const [textColor, setTextColor] = useState(initialMedia.textColor);
+const [isMediaPlaying, setIsMediaPlaying] = useState(initialMedia.isPlaying);
+const [mediaPosition, setMediaPosition] = useState(initialMedia.position);
+const [mediaDuration, setMediaDuration] = useState(initialMedia.duration);
 
   /* 订阅 Media Integration 状态更新 */
   useEffect(() => {
@@ -140,11 +166,7 @@ function WallpaperApp() {
   /* applyUserProperties 回调 - Wallpaper Engine 配置项变更 */
   const handleProperties = useCallback((properties: WallpaperProperties) => {
     if (properties.theme?.value) {
-      const themeValue = properties.theme.value as string;
-      setThemeMode(themeValue);
-      if (themeValue !== 'cycle') {
-        setThemeName(themeValue);
-      }
+      setThemeMode(properties.theme.value as string);
     }
     if (properties.idleWaveEnabled?.value !== undefined) {
       setIdleWaveEnabled(properties.idleWaveEnabled.value as boolean);
@@ -155,9 +177,6 @@ function WallpaperApp() {
     if (properties.idleWaveFadeDuration?.value !== undefined) {
       engine.setIdleFadeOutDuration(properties.idleWaveFadeDuration.value as number);
     }
-    if (properties.autoRotateSpeed?.value !== undefined) {
-      setAutoRotateSpeed(properties.autoRotateSpeed.value as number);
-    }
     if (properties.cameraDistance?.value !== undefined) {
       setCameraDistance(properties.cameraDistance.value as number);
     }
@@ -166,6 +185,12 @@ function WallpaperApp() {
     }
     if (properties.cameraAngleY?.value !== undefined) {
       setCameraAngleY(properties.cameraAngleY.value as number);
+    }
+    if (properties.autoRotateEnabled?.value !== undefined) {
+      setAutoRotateEnabled(properties.autoRotateEnabled.value as boolean);
+    }
+    if (properties.autoRotateSpeed?.value !== undefined) {
+      setAutoRotateSpeed(properties.autoRotateSpeed.value as number);
     }
     if (properties.pulseEnabled?.value !== undefined) {
       engine.pulseTrigger.enabled = properties.pulseEnabled.value as boolean;
@@ -194,6 +219,12 @@ function WallpaperApp() {
     if (properties.controllerSize?.value !== undefined) {
       setControllerSize(properties.controllerSize.value as 'small' | 'medium' | 'large');
     }
+    if (properties.controllerX?.value !== undefined) {
+      setControllerX(properties.controllerX.value as number);
+    }
+    if (properties.controllerY?.value !== undefined) {
+      setControllerY(properties.controllerY.value as number);
+    }
     if (properties.audioIntensity?.value !== undefined) {
       setAudioIntensity(properties.audioIntensity.value as number);
     }
@@ -217,7 +248,7 @@ function WallpaperApp() {
     }
   }, []);
 
-  /* 主题轮询过渡动画 */
+  /* 主题轮询过渡动画（带 FPS 限制） */
   useEffect(() => {
     if (themeMode !== 'cycle') return;
     
@@ -225,22 +256,36 @@ function WallpaperApp() {
     cycleStartRef.current = performance.now();
     
     let animationId: number;
+    let lastTime = performance.now() / 1000;
+    let fpsThreshold = 0;
     
     const animate = () => {
-      const now = performance.now();
-      const elapsed = (now - cycleStartRef.current) / 1000; // 秒
-      const progress = elapsed / themeCycleInterval; // 0-1 之间的进度
+      animationId = requestAnimationFrame(animate);
+      
+      // FPS 限制逻辑
+      const now = performance.now() / 1000;
+      const dt = Math.min(now - lastTime, 1);
+      lastTime = now;
+      
+      if (fpsLimit > 0) {
+        fpsThreshold += dt;
+        if (fpsThreshold < 1.0 / fpsLimit) {
+          return;
+        }
+        fpsThreshold -= 1.0 / fpsLimit;
+      }
+      
+      // 执行动画逻辑
+      const elapsed = (performance.now() - cycleStartRef.current) / 1000;
+      const progress = elapsed / themeCycleInterval;
       
       if (progress >= 1) {
-        // 过渡完成，切换到下一个主题
         currentThemeIndexRef.current = (currentThemeIndexRef.current + 1) % themeIds.length;
-        cycleStartRef.current = now;
+        cycleStartRef.current = performance.now();
         setCycleProgress(0);
       } else {
         setCycleProgress(progress);
       }
-      
-      animationId = requestAnimationFrame(animate);
     };
     
     animationId = requestAnimationFrame(animate);
@@ -248,7 +293,7 @@ function WallpaperApp() {
     return () => {
       if (animationId) cancelAnimationFrame(animationId);
     };
-  }, [themeMode, themeCycleInterval]);
+  }, [themeMode, themeCycleInterval, fpsLimit]);
 
   /* 注册 Wallpaper Engine 核心回调 */
   useEffect(() => {
@@ -258,10 +303,31 @@ function WallpaperApp() {
         engine.setWallpaperAudioData(audioData);
       });
     }
-    w.wallpaperPropertyListener = { applyUserProperties: handleProperties };
+    // 注册属性回调，后续属性变更直接应用
+    _applyProps = handleProperties;
+    _applyGeneralProps = (props: GeneralProperties) => {
+      if (props.fps !== undefined) {
+        setFpsLimit(props.fps);
+      }
+    };
+    // 应用启动时缓存的属性
+    if (_pendingProps) {
+      handleProperties(_pendingProps);
+      _pendingProps = null;
+    }
+    if (_pendingGeneralProps) {
+      if (_pendingGeneralProps.fps !== undefined) {
+        setFpsLimit(_pendingGeneralProps.fps);
+      }
+      _pendingGeneralProps = null;
+    }
     if (w.wallpaperReady) {
       w.wallpaperReady();
     }
+    return () => {
+      _applyProps = null;
+      _applyGeneralProps = null;
+    };
   }, [handleProperties]);
 
   /* 空闲波浪检测 */
@@ -363,7 +429,8 @@ function WallpaperApp() {
   return (
     <div className="w-screen h-screen overflow-hidden" style={{ backgroundColor: bgColor }} onClick={handleRootClick}>
       <div className="absolute inset-0 z-0">
-        <Canvas camera={{ position: [35, 25, 35], fov: 45 }}>
+        <Canvas camera={{ position: [35, 25, 35], fov: 45 }} frameloop="demand">
+          <FPSLimiter fpsLimit={fpsLimit} />
           <MapScene
             ref={mapSceneRef}
             theme={currentTheme}
@@ -371,10 +438,11 @@ function WallpaperApp() {
             responseRange={responseRange}
             gridSize={gridSize}
             idleWaveEnabled={idleWaveEnabled}
-            autoRotateSpeed={autoRotateSpeed}
             cameraDistance={cameraDistance}
             cameraAngleX={cameraAngleX}
             cameraAngleY={cameraAngleY}
+            autoRotateEnabled={autoRotateEnabled}
+            autoRotateSpeed={autoRotateSpeed}
             peakColorEnabled={peakColorEnabled}
             peakColorIntensity={peakColorIntensity}
           />
@@ -384,8 +452,10 @@ function WallpaperApp() {
       {/* 播放器控制器 */}
       {showPlayerController && (
         <div
-          className="absolute top-[28px] right-[28px] z-50 select-none"
+          className="absolute z-50 select-none"
           style={{
+            top: `${controllerY}vh`,
+            right: `${controllerX}vw`,
             opacity: showPlayerActual ? 1 : 0,
             transform: showPlayerActual
               ? 'scale(1) translateY(0px)'

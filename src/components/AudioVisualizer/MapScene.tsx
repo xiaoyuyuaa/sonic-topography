@@ -1,5 +1,4 @@
 import { useFrame, extend, useThree } from '@react-three/fiber';
-import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 import { useRef, useMemo, useCallback, useLayoutEffect, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { MapShaderMaterial } from './CustomShaderMaterial';
@@ -10,13 +9,14 @@ extend({ MapShaderMaterial });
 
 interface MapSceneProps {
   theme?: string | ThemeColors; // 支持主题名或混合后的主题颜色对象
-  autoRotateSpeed?: number;
   cameraDistance?: number;
   idleWaveEnabled?: boolean;
   audioIntensity?: number;
   responseRange?: number;
   cameraAngleX?: number;
   cameraAngleY?: number;
+  autoRotateEnabled?: boolean;
+  autoRotateSpeed?: number; // 每秒旋转的角度（度）
   gridSize?: number;
   peakColorEnabled?: boolean; // 强调色开关
   peakColorIntensity?: number; // 强调色强度 (0-2)
@@ -26,12 +26,14 @@ export interface MapSceneHandle {
   triggerMeteorAt: (clientX: number, clientY: number) => void;
 }
 
-export const MapScene = forwardRef<MapSceneHandle, MapSceneProps>(({ theme = 'nocturnal', autoRotateSpeed = 0.5, cameraDistance = 50, idleWaveEnabled = true, audioIntensity = 1.0, responseRange = 1.0, cameraAngleX = 45, cameraAngleY = 30, gridSize = 160, peakColorEnabled = true, peakColorIntensity = 1.0 }, ref) => {
+export const MapScene = forwardRef<MapSceneHandle, MapSceneProps>(({ theme = 'nocturnal', cameraDistance = 50, idleWaveEnabled = true, audioIntensity = 1.0, responseRange = 1.0, cameraAngleX = 45, cameraAngleY = 30, autoRotateEnabled = false, autoRotateSpeed = 10, gridSize = 160, peakColorEnabled = true, peakColorIntensity = 1.0 }, ref) => {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const materialRef = useRef<any>(null);
-  const orbitControlsRef = useRef<any>(null);
   const { clock, camera, gl } = useThree();
-  
+
+  // 自动旋转角度追踪
+  const autoRotateAngleRef = useRef(cameraAngleX);
+
   // 获取主题颜色对象
   const getThemeColors = useCallback((): ThemeColors => {
     if (typeof theme === 'string') {
@@ -230,10 +232,29 @@ export const MapScene = forwardRef<MapSceneHandle, MapSceneProps>(({ theme = 'no
     },
   }), [camera, gl, clock]);
 
+  // Camera position controlled by distance + two-axis angle
+  const updateCameraPosition = useCallback((angleX: number, angleY: number, dist: number) => {
+    const azimuth = angleX * Math.PI / 180;
+    const elevation = angleY * Math.PI / 180;
+    const horizontalDist = dist * Math.cos(elevation);
+    camera.position.x = horizontalDist * Math.sin(azimuth);
+    camera.position.z = horizontalDist * Math.cos(azimuth);
+    camera.position.y = dist * Math.sin(elevation);
+    camera.lookAt(0, 0, 0);
+  }, [camera]);
+
+  useEffect(() => {
+    // 自动旋转启用时，同步初始角度到 ref
+    if (autoRotateEnabled) {
+      autoRotateAngleRef.current = cameraAngleX;
+    }
+    updateCameraPosition(cameraAngleX, cameraAngleY, cameraDistance);
+  }, [cameraAngleX, cameraAngleY, cameraDistance, autoRotateEnabled, updateCameraPosition]);
+
   useFrame((state, delta) => {
     if (!materialRef.current) return;
     const mat = materialRef.current;
-    const data = engine.getAudioData();
+    const data = engine.getAudioData(delta);
     const t = getThemeColors();
 
     // 如果传入的是混合主题对象，直接应用颜色（不再使用 lerp 过渡）
@@ -288,7 +309,7 @@ export const MapScene = forwardRef<MapSceneHandle, MapSceneProps>(({ theme = 'no
 
     // Background ambient wave - dynamic control based on audio state
     // Audio playing: idle wave = 0, stopped >3s: smooth transition to 1
-    const idleIntensity = engine.getIdleWaveIntensity();
+    const idleIntensity = engine.getIdleWaveIntensity(delta);
     mat.uIdleWave = idleWaveEnabled ? idleIntensity : 0.0;
 
     mat.uHalfExtent = halfExtent;
@@ -359,26 +380,13 @@ export const MapScene = forwardRef<MapSceneHandle, MapSceneProps>(({ theme = 'no
         }
         particleMeshRef.current.instanceMatrix.needsUpdate = true;
     }
-  });
 
-  // Camera position controlled by distance + two-axis angle
-  const updateCameraPosition = useCallback((angleX: number, angleY: number, dist: number) => {
-    const azimuth = angleX * Math.PI / 180;
-    const elevation = angleY * Math.PI / 180;
-    const horizontalDist = dist * Math.cos(elevation);
-    camera.position.x = horizontalDist * Math.sin(azimuth);
-    camera.position.z = horizontalDist * Math.cos(azimuth);
-    camera.position.y = dist * Math.sin(elevation);
-    camera.lookAt(0, 0, 0);
-    if (orbitControlsRef.current) {
-      orbitControlsRef.current.target.set(0, 0, 0);
-      orbitControlsRef.current.update();
+    // 自动旋转逻辑 - 在 demand 模式下受 FPSLimiter 控制
+    if (autoRotateEnabled) {
+      autoRotateAngleRef.current = (autoRotateAngleRef.current + autoRotateSpeed * delta) % 360;
+      updateCameraPosition(autoRotateAngleRef.current, cameraAngleY, cameraDistance);
     }
-  }, [camera]);
-
-  useEffect(() => {
-    updateCameraPosition(cameraAngleX, cameraAngleY, cameraDistance);
-  }, [cameraAngleX, cameraAngleY, cameraDistance, updateCameraPosition]);
+  });
 
   const t = getThemeColors();
 
@@ -387,19 +395,6 @@ export const MapScene = forwardRef<MapSceneHandle, MapSceneProps>(({ theme = 'no
       <fog ref={fogRef} attach="fog" args={[`#${t.uBaseColor1.getHexString()}`, 30, 95]} />
       <ambientLight intensity={0.5} />
       <directionalLight position={[10, 20, 10]} intensity={1} />
-
-      <OrbitControls
-        ref={orbitControlsRef}
-        makeDefault
-        autoRotate
-        autoRotateSpeed={autoRotateSpeed}
-        enableRotate={false}
-        enableZoom={false}
-        enablePan={false}
-        minDistance={cameraDistance}
-        maxDistance={cameraDistance}
-        maxPolarAngle={Math.PI / 2 - 0.1}
-      />
 
       <instancedMesh
         ref={meshRef}
