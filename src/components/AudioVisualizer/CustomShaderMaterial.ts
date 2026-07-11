@@ -23,7 +23,7 @@ export const MapShaderMaterial = shaderMaterial(
     uAudioIntensity: 1.0,
     uResponseRange: 1.0,
     uHalfExtent: 84,
-    uRipples: new Array(10).fill({
+    uRipples: new Array(20).fill({
       pos: new THREE.Vector2(),
       time: 0,
       strength: 0,
@@ -69,7 +69,7 @@ export const MapShaderMaterial = shaderMaterial(
       float isActive;
       float rippleType;
     };
-    uniform Ripple uRipples[10];
+    uniform Ripple uRipples[20];
 
     varying vec2 vUv;
     varying float vElevation;
@@ -104,12 +104,14 @@ export const MapShaderMaterial = shaderMaterial(
       return fract(sin(dot(st.xy, vec2(12.9898,78.233))) * 43758.5453123);
     }
 
-    // Eased lift: ease-out-cubic for smooth rise + subtle elastic overshoot at high energy
+    // Eased lift: ease-out-quad 主体 + 单峰弹跳过冲，峰值附近有明显跃动感
     float easeLift(float raw, float maxHeight) {
       float x = clamp(raw, 0.0, 1.0);
-      float eased = 1.0 - pow(1.0 - x, 2.5);
-      float overshoot = sin(x * 6.283 * 1.5) * exp(-x * 4.0) * 0.15;
-      return (eased + overshoot) * maxHeight;
+      // 主体：ease-out-quad 快速上升
+      float eased = 1.0 - pow(1.0 - x, 2.0);
+      // 跃动感：sin(πx) 单峰始终为正，pow(x,2) 让弹跳集中在峰值附近
+      float bounce = sin(x * 3.14159) * pow(x, 2.0) * 0.35;
+      return (eased + bounce) * maxHeight;
     }
 
     // Flow lift: quick initial response, soft peak with gentle pulsing mid-energy

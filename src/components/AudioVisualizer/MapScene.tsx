@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { useRef, useMemo, useCallback, useLayoutEffect, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { MapShaderMaterial } from './CustomShaderMaterial';
 import { engine } from '../../lib/AudioEngine';
+import { AudioData } from '../../types';
 import { themes, ThemeColors } from '../../lib/themes';
 
 extend({ MapShaderMaterial });
@@ -33,6 +34,10 @@ export const MapScene = forwardRef<MapSceneHandle, MapSceneProps>(({ theme = 'no
 
   // 自动旋转角度追踪
   const autoRotateAngleRef = useRef(cameraAngleX);
+
+  // 复用 Color 对象避免每帧 GC
+  const _tempColor = useMemo(() => new THREE.Color(), []);
+  const _whiteColor = useMemo(() => new THREE.Color(0xffffff), []);
 
   // 获取主题颜色对象
   const getThemeColors = useCallback((): ThemeColors => {
@@ -67,8 +72,8 @@ export const MapScene = forwardRef<MapSceneHandle, MapSceneProps>(({ theme = 'no
   }, [gridSize, spacing]);
 
   // Ripples logic
-  // We keep a ring buffer of 10 ripples
-  const ripplesRef = useRef(new Array(10).fill(null).map(() => ({
+  // We keep a ring buffer of 20 ripples
+  const ripplesRef = useRef(new Array(20).fill(null).map(() => ({
     pos: new THREE.Vector2(),
     time: -100,
     strength: 0,
@@ -86,13 +91,13 @@ export const MapScene = forwardRef<MapSceneHandle, MapSceneProps>(({ theme = 'no
       isActive: 1,
       rippleType: isWhite ? 1 : 0
     } as any;
-    rippleIndex.current = (idx + 1) % 10;
+    rippleIndex.current = (idx + 1) % 20;
   };
 
   const fogRef = useRef<THREE.Fog>(null);
   
   // Meteors logic
-  const MAX_METEORS = 20;
+  const MAX_METEORS = 40;
   const meteorMeshRef = useRef<THREE.InstancedMesh>(null);
   const meteorMatRef = useRef<THREE.MeshBasicMaterial>(null);
   
@@ -251,17 +256,82 @@ export const MapScene = forwardRef<MapSceneHandle, MapSceneProps>(({ theme = 'no
     updateCameraPosition(cameraAngleX, cameraAngleY, cameraDistance);
   }, [cameraAngleX, cameraAngleY, cameraDistance, autoRotateEnabled, updateCameraPosition]);
 
-  useFrame((state, delta) => {
+  // 逻辑帧缓冲区：逻辑帧写入，渲染帧读取
+  const logicBufferRef = useRef({
+    audioData: null as AudioData | null,
+    idleIntensity: 0,
+  });
+
+  /* 逻辑帧：固定 1000fps，独立于渲染帧率，保证位置更新平滑跟手 */
+  useEffect(() => {
+    const LOGIC_FPS = 1000;
+    let lastTime = performance.now();
+
+    const tick = () => {
+      const now = performance.now();
+      const elapsed = (now - lastTime) / 1000;
+      lastTime = now;
+      const dt = Math.min(elapsed, 0.1);
+
+      // 音频数据采样
+      logicBufferRef.current.audioData = engine.getAudioData(dt);
+      logicBufferRef.current.idleIntensity = engine.getIdleWaveIntensity(dt);
+
+      // 流星位置更新
+      for (let i = 0; i < MAX_METEORS; i++) {
+        const m = meteorsRef.current[i];
+        if (m.active) {
+          m.y -= m.speed * 60 * dt;
+          if (m.y <= 0) {
+            m.active = false;
+            addRipple(m.x, m.z, m.strength * 1.5, true);
+            for (let pIndex = 0; pIndex < 10; pIndex++) spawnParticle(m.x, 0.5, m.z, m.speed * 1.5);
+          }
+          // 流星拖尾粒子
+          if (m.active && m.y > 0 && Math.random() > 0.3) {
+            spawnParticle(m.x, m.y, m.z, m.speed * 0.2);
+          }
+        }
+      }
+
+      // 粒子位置更新
+      for (let i = 0; i < MAX_PARTICLES; i++) {
+        const p = particlesRef.current[i];
+        if (p.active) {
+          p.life += dt;
+          if (p.life >= p.maxLife) {
+            p.active = false;
+          } else {
+            p.x += p.vx * dt * 10;
+            p.y += p.vy * dt * 10;
+            p.z += p.vz * dt * 10;
+          }
+        }
+      }
+
+      // 自动旋转
+      if (autoRotateEnabled) {
+        autoRotateAngleRef.current = (autoRotateAngleRef.current + autoRotateSpeed * dt) % 360;
+        updateCameraPosition(autoRotateAngleRef.current, cameraAngleY, cameraDistance);
+      }
+    };
+
+    const interval = setInterval(tick, 1000 / LOGIC_FPS);
+    tick();
+    return () => clearInterval(interval);
+  }, [MAX_METEORS, MAX_PARTICLES, autoRotateEnabled, autoRotateSpeed, cameraAngleY, cameraDistance, updateCameraPosition, addRipple, spawnParticle]);
+
+  /* 渲染帧：按 fpsLimit 频率，只传递 uniform + 更新矩阵 */
+  useFrame((state) => {
     if (!materialRef.current) return;
     const mat = materialRef.current;
-    const data = engine.getAudioData(delta);
+    const buf = logicBufferRef.current;
+    const data = buf.audioData || engine.getAudioData(0.016);
     const t = getThemeColors();
 
-    // 如果传入的是混合主题对象，直接应用颜色（不再使用 lerp 过渡）
-    // 如果传入的是主题名称，使用 lerp 平滑过渡
     const isMixedTheme = typeof theme !== 'string';
-    const lerpSpeed = isMixedTheme ? 1.0 : (3.0 * delta);
-    
+    const lerpSpeed = isMixedTheme ? 1.0 : 0.05;
+
     mat.uBaseColor1.lerp(t.uBaseColor1, lerpSpeed);
     mat.uBaseColor2.lerp(t.uBaseColor2, lerpSpeed);
     mat.uCoolCore.lerp(t.uCoolCore, lerpSpeed);
@@ -283,108 +353,62 @@ export const MapScene = forwardRef<MapSceneHandle, MapSceneProps>(({ theme = 'no
     mat.uMid = data.mid;
     mat.uTreble = data.treble;
     mat.uEnergy = data.energy;
-    
     mat.uSubBass = data.subBass;
     mat.uLowMid = data.lowMid;
     mat.uHighMid = data.highMid;
     mat.uPresence = data.presence;
     mat.uBrilliance = data.brilliance;
     mat.uAir = data.air;
-
     mat.uWarmth = data.warmth;
     mat.uBrightness = data.brightness;
     mat.uSharpness = data.sharpness;
     mat.uSmoothness = data.smoothness;
     mat.uDensity = data.density;
     mat.uSpectralCentroid = data.spectralCentroid;
-
-    // Audio intensity multiplier for height control (from config)
     mat.uAudioIntensity = audioIntensity;
-
-    // Response range: how many blocks participate (from config)
     mat.uResponseRange = responseRange;
-
-    // Pass ripples
     mat.uRipples = ripplesRef.current;
-
-    // Background ambient wave - dynamic control based on audio state
-    // Audio playing: idle wave = 0, stopped >3s: smooth transition to 1
-    const idleIntensity = engine.getIdleWaveIntensity(delta);
-    mat.uIdleWave = idleWaveEnabled ? idleIntensity : 0.0;
-
+    mat.uIdleWave = idleWaveEnabled ? buf.idleIntensity : 0.0;
     mat.uHalfExtent = halfExtent;
 
-    // Update meteors
+    // 流星矩阵更新
     if (meteorMeshRef.current) {
-        
         if (meteorMatRef.current) {
-            const mColor = new THREE.Color().copy(t.uWarmCore).lerp(new THREE.Color(0xffffff), 0.7);
+            const mColor = _tempColor.copy(t.uWarmCore).lerp(_whiteColor, 0.7);
             meteorMatRef.current.color.lerp(mColor, lerpSpeed);
         }
-
         for (let i = 0; i < MAX_METEORS; i++) {
             const m = meteorsRef.current[i];
             if (!m.active) {
                 dummyPosition.set(0, -1000, 0);
                 dummyScale.set(0, 0, 0);
-                dummyMatrix.compose(dummyPosition, dummyRotation, dummyScale);
-                meteorMeshRef.current.setMatrixAt(i, dummyMatrix);
             } else {
-                m.y -= m.speed * 60 * delta; // falling translation (faster)
-                if (m.y <= 0) {
-                    m.active = false;
-                    addRipple(m.x, m.z, m.strength * 1.5, true); // miniature white wave impact
-                    // Impact particles
-                    for (let pIndex = 0; pIndex < 10; pIndex++) spawnParticle(m.x, 0.5, m.z, m.speed * 1.5);
-                }
                 dummyPosition.set(m.x, Math.max(0, m.y), m.z);
                 dummyScale.set(1.5, 1.5, 1.5);
-                dummyMatrix.compose(dummyPosition, dummyRotation, dummyScale);
-                meteorMeshRef.current.setMatrixAt(i, dummyMatrix);
-                
-                if (m.y > 0 && Math.random() > 0.3) {
-                   spawnParticle(m.x, m.y, m.z, m.speed * 0.2); // trail
-                }
             }
+            dummyMatrix.compose(dummyPosition, dummyRotation, dummyScale);
+            meteorMeshRef.current.setMatrixAt(i, dummyMatrix);
         }
         meteorMeshRef.current.instanceMatrix.needsUpdate = true;
     }
-    
-    // Update particles
+
+    // 粒子矩阵更新
     if (particleMeshRef.current) {
-        if (particleMatRef.current) particleMatRef.current.color.copy(meteorMatRef.current ? meteorMatRef.current.color : new THREE.Color(0xffffff));
-        
+        if (particleMatRef.current) particleMatRef.current.color.copy(meteorMatRef.current ? meteorMatRef.current.color : _whiteColor);
         for (let i = 0; i < MAX_PARTICLES; i++) {
            const p = particlesRef.current[i];
            if (!p.active) {
                 dummyPosition.set(0, -1000, 0);
                 dummyScale.set(0, 0, 0);
-                dummyMatrix.compose(dummyPosition, dummyRotation, dummyScale);
-                particleMeshRef.current.setMatrixAt(i, dummyMatrix);
            } else {
-                p.life += delta;
-                if (p.life >= p.maxLife) {
-                    p.active = false;
-                    dummyScale.set(0, 0, 0);
-                } else {
-                    p.x += p.vx * delta * 10;
-                    p.y += p.vy * delta * 10;
-                    p.z += p.vz * delta * 10;
-                    const s = p.scale * (1.0 - (p.life / p.maxLife));
-                    dummyPosition.set(p.x, p.y, p.z);
-                    dummyScale.set(s, s, s);
-                }
-                dummyMatrix.compose(dummyPosition, dummyRotation, dummyScale);
-                particleMeshRef.current.setMatrixAt(i, dummyMatrix);
+                const s = p.scale * (1.0 - (p.life / p.maxLife));
+                dummyPosition.set(p.x, p.y, p.z);
+                dummyScale.set(s, s, s);
            }
+           dummyMatrix.compose(dummyPosition, dummyRotation, dummyScale);
+           particleMeshRef.current.setMatrixAt(i, dummyMatrix);
         }
         particleMeshRef.current.instanceMatrix.needsUpdate = true;
-    }
-
-    // 自动旋转逻辑 - 在 demand 模式下受 FPSLimiter 控制
-    if (autoRotateEnabled) {
-      autoRotateAngleRef.current = (autoRotateAngleRef.current + autoRotateSpeed * delta) % 360;
-      updateCameraPosition(autoRotateAngleRef.current, cameraAngleY, cameraDistance);
     }
   });
 
@@ -403,7 +427,7 @@ export const MapScene = forwardRef<MapSceneHandle, MapSceneProps>(({ theme = 'no
       >
         <boxGeometry args={[pillarWidth, 1, pillarWidth]} />
         {/* @ts-ignore */}
-        <mapShaderMaterial ref={materialRef} transparent={true} />
+        <mapShaderMaterial ref={materialRef} transparent={true} depthWrite={true} />
       </instancedMesh>
 
       <instancedMesh ref={meteorMeshRef} args={[undefined as any, undefined as any, MAX_METEORS]} frustumCulled={false}>

@@ -248,34 +248,13 @@ const [mediaDuration, setMediaDuration] = useState(initialMedia.duration);
     }
   }, []);
 
-  /* 主题轮询过渡动画（带 FPS 限制） */
+  /* 主题轮询过渡 - 低频定时器驱动（1秒更新一次，避免独立 rAF 与 demand 模式冲突） */
   useEffect(() => {
     if (themeMode !== 'cycle') return;
     
-    // 初始化开始时间
     cycleStartRef.current = performance.now();
     
-    let animationId: number;
-    let lastTime = performance.now() / 1000;
-    let fpsThreshold = 0;
-    
-    const animate = () => {
-      animationId = requestAnimationFrame(animate);
-      
-      // FPS 限制逻辑
-      const now = performance.now() / 1000;
-      const dt = Math.min(now - lastTime, 1);
-      lastTime = now;
-      
-      if (fpsLimit > 0) {
-        fpsThreshold += dt;
-        if (fpsThreshold < 1.0 / fpsLimit) {
-          return;
-        }
-        fpsThreshold -= 1.0 / fpsLimit;
-      }
-      
-      // 执行动画逻辑
+    const tick = () => {
       const elapsed = (performance.now() - cycleStartRef.current) / 1000;
       const progress = elapsed / themeCycleInterval;
       
@@ -288,12 +267,10 @@ const [mediaDuration, setMediaDuration] = useState(initialMedia.duration);
       }
     };
     
-    animationId = requestAnimationFrame(animate);
-    
-    return () => {
-      if (animationId) cancelAnimationFrame(animationId);
-    };
-  }, [themeMode, themeCycleInterval, fpsLimit]);
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [themeMode, themeCycleInterval]);
 
   /* 注册 Wallpaper Engine 核心回调 */
   useEffect(() => {
@@ -468,8 +445,8 @@ const [mediaDuration, setMediaDuration] = useState(initialMedia.duration);
           <div
             style={{
               background: 'rgba(0,0,0,0.45)',
-              backdropFilter: 'blur(24px) saturate(1.4)',
-              WebkitBackdropFilter: 'blur(24px) saturate(1.4)',
+              backdropFilter: showPlayerActual ? 'blur(24px) saturate(1.4)' : 'none',
+              WebkitBackdropFilter: showPlayerActual ? 'blur(24px) saturate(1.4)' : 'none',
               border: '1px solid rgba(255,255,255,0.06)',
               borderRadius: '18px',
               boxShadow: '0 16px 48px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)',

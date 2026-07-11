@@ -26,6 +26,11 @@ export const themeIds = [
   'coral-mirage',
   'neon-tokyo',
   'minimal-monochrome',
+  'teal-depth',
+  'lavender-dream',
+  'cherry-blossom',
+  'copper-forge',
+  'mint-fresh',
 ] as const;
 
 export type ThemeId = typeof themeIds[number];
@@ -51,7 +56,7 @@ export function lerpThemes(theme1: ThemeColors, theme2: ThemeColors, t: number):
 export const themes: Record<string, ThemeColors> = {
   // === 1. 靛蓝紫 (Indigo Violet) ===
   'nocturnal': {
-    name: 'Nocturnal',
+    name: '霁紫',
     id: 'nocturnal',
     uBaseColor1: new THREE.Color(0.005, 0.008, 0.025),
     uBaseColor2: new THREE.Color(0.015, 0.025, 0.07),
@@ -65,7 +70,7 @@ export const themes: Record<string, ThemeColors> = {
   },
   // === 2. 深海蓝 (Deep Ocean Blue) ===
   'ocean-deep': {
-    name: 'Ocean Deep',
+    name: '沧蓝',
     id: 'ocean-deep',
     uBaseColor1: new THREE.Color(0.002, 0.008, 0.028),
     uBaseColor2: new THREE.Color(0.005, 0.018, 0.06),
@@ -79,7 +84,7 @@ export const themes: Record<string, ThemeColors> = {
   },
   // === 3. 冰蓝 (Arctic Cyan) ===
   'arctic-aurora': {
-    name: 'Arctic Aurora',
+    name: '冰蓝',
     id: 'arctic-aurora',
     uBaseColor1: new THREE.Color(0.003, 0.015, 0.022),
     uBaseColor2: new THREE.Color(0.01, 0.03, 0.055),
@@ -93,7 +98,7 @@ export const themes: Record<string, ThemeColors> = {
   },
   // === 4. 翡翠绿 (Emerald Green) ===
   'cyber-forest': {
-    name: 'Cyber Forest',
+    name: '碧翠',
     id: 'cyber-forest',
     uBaseColor1: new THREE.Color(0.003, 0.018, 0.005),
     uBaseColor2: new THREE.Color(0.01, 0.045, 0.018),
@@ -107,7 +112,7 @@ export const themes: Record<string, ThemeColors> = {
   },
   // === 5. 暖金黄 (Warm Gold) ===
   'golden-hour': {
-    name: 'Golden Hour',
+    name: '流金',
     id: 'golden-hour',
     uBaseColor1: new THREE.Color(0.018, 0.015, 0.005),
     uBaseColor2: new THREE.Color(0.045, 0.035, 0.012),
@@ -121,7 +126,7 @@ export const themes: Record<string, ThemeColors> = {
   },
   // === 6. 琥珀橙 (Amber Orange) ===
   'ember-fire': {
-    name: 'Ember Fire',
+    name: '余烬',
     id: 'ember-fire',
     uBaseColor1: new THREE.Color(0.022, 0.008, 0.002),
     uBaseColor2: new THREE.Color(0.05, 0.018, 0.005),
@@ -135,7 +140,7 @@ export const themes: Record<string, ThemeColors> = {
   },
   // === 7. 血红 (Crimson Red) ===
   'crimson-sunset': {
-    name: 'Crimson Sunset',
+    name: '赤焰',
     id: 'crimson-sunset',
     uBaseColor1: new THREE.Color(0.025, 0.003, 0.005),
     uBaseColor2: new THREE.Color(0.055, 0.01, 0.015),
@@ -149,7 +154,7 @@ export const themes: Record<string, ThemeColors> = {
   },
   // === 8. 珊瑚粉 (Coral Pink) ===
   'coral-mirage': {
-    name: 'Coral Mirage',
+    name: '霞粉',
     id: 'coral-mirage',
     uBaseColor1: new THREE.Color(0.02, 0.006, 0.01),
     uBaseColor2: new THREE.Color(0.045, 0.015, 0.022),
@@ -163,7 +168,7 @@ export const themes: Record<string, ThemeColors> = {
   },
   // === 9. 霓虹紫粉 (Neon Magenta) ===
   'neon-tokyo': {
-    name: 'Neon Tokyo',
+    name: '幻紫',
     id: 'neon-tokyo',
     uBaseColor1: new THREE.Color(0.01, 0.002, 0.025),
     uBaseColor2: new THREE.Color(0.03, 0.008, 0.065),
@@ -177,7 +182,7 @@ export const themes: Record<string, ThemeColors> = {
   },
   // === 10. 极简黑白 (Greyscale) ===
   'minimal-monochrome': {
-    name: 'Minimal Monochrome',
+    name: '水墨',
     id: 'minimal-monochrome',
     uBaseColor1: new THREE.Color(0.012, 0.012, 0.012),
     uBaseColor2: new THREE.Color(0.045, 0.045, 0.045),
@@ -188,5 +193,75 @@ export const themes: Record<string, ThemeColors> = {
     uRippleColor: new THREE.Color(1.0, 1.0, 1.0),
     uPeakColor: new THREE.Color(1.0, 1.0, 1.0),        // 纯白
     uGlowIntensity: 0.7,
+  },
+  // === 11. 青 (Teal) ===
+  'teal-depth': {
+    name: '幽青',
+    id: 'teal-depth',
+    uBaseColor1: new THREE.Color(0.002, 0.018, 0.02),
+    uBaseColor2: new THREE.Color(0.008, 0.04, 0.045),
+    uCoolCore: new THREE.Color(0.0, 0.55, 0.55),       // 深青
+    uCoolEdge: new THREE.Color(0.0, 0.25, 0.28),       // 暗青
+    uWarmCore: new THREE.Color(0.2, 0.85, 0.75),       // 亮青绿
+    uWarmEdge: new THREE.Color(0.08, 0.55, 0.5),       // 中青
+    uRippleColor: new THREE.Color(0.15, 0.8, 0.7),
+    uPeakColor: new THREE.Color(1.0, 0.45, 0.15),      // 橙红 - 互补色
+    uGlowIntensity: 1.2,
+  },
+  // === 12. 薰衣草 (Lavender) ===
+  'lavender-dream': {
+    name: '薰衣草',
+    id: 'lavender-dream',
+    uBaseColor1: new THREE.Color(0.012, 0.008, 0.022),
+    uBaseColor2: new THREE.Color(0.03, 0.02, 0.055),
+    uCoolCore: new THREE.Color(0.55, 0.35, 0.85),      // 薰衣草紫
+    uCoolEdge: new THREE.Color(0.3, 0.15, 0.55),       // 暗紫
+    uWarmCore: new THREE.Color(0.75, 0.55, 1.0),       // 亮淡紫
+    uWarmEdge: new THREE.Color(0.5, 0.3, 0.75),        // 中紫
+    uRippleColor: new THREE.Color(0.65, 0.45, 1.0),
+    uPeakColor: new THREE.Color(1.0, 0.8, 0.25),       // 暖黄 - 对比色
+    uGlowIntensity: 1.1,
+  },
+  // === 13. 樱 (Cherry Blossom) ===
+  'cherry-blossom': {
+    name: '樱',
+    id: 'cherry-blossom',
+    uBaseColor1: new THREE.Color(0.018, 0.005, 0.012),
+    uBaseColor2: new THREE.Color(0.04, 0.012, 0.025),
+    uCoolCore: new THREE.Color(1.0, 0.55, 0.65),       // 樱花粉
+    uCoolEdge: new THREE.Color(0.7, 0.2, 0.35),        // 深粉
+    uWarmCore: new THREE.Color(1.0, 0.72, 0.78),       // 浅粉
+    uWarmEdge: new THREE.Color(0.85, 0.45, 0.55),      // 中粉
+    uRippleColor: new THREE.Color(1.0, 0.6, 0.7),
+    uPeakColor: new THREE.Color(0.25, 0.9, 0.55),      // 翠绿 - 互补色
+    uGlowIntensity: 1.15,
+  },
+  // === 14. 铜 (Copper) ===
+  'copper-forge': {
+    name: '锻铜',
+    id: 'copper-forge',
+    uBaseColor1: new THREE.Color(0.02, 0.01, 0.005),
+    uBaseColor2: new THREE.Color(0.045, 0.025, 0.012),
+    uCoolCore: new THREE.Color(0.85, 0.45, 0.2),       // 铜色
+    uCoolEdge: new THREE.Color(0.5, 0.22, 0.08),       // 暗铜
+    uWarmCore: new THREE.Color(1.0, 0.65, 0.3),        // 亮铜
+    uWarmEdge: new THREE.Color(0.75, 0.38, 0.15),      // 中铜
+    uRippleColor: new THREE.Color(0.9, 0.55, 0.25),
+    uPeakColor: new THREE.Color(0.3, 0.65, 0.35),      // 铜绿 - 锈蚀互补
+    uGlowIntensity: 1.3,
+  },
+  // === 15. 薄荷 (Mint) ===
+  'mint-fresh': {
+    name: '薄荷',
+    id: 'mint-fresh',
+    uBaseColor1: new THREE.Color(0.003, 0.02, 0.015),
+    uBaseColor2: new THREE.Color(0.01, 0.045, 0.035),
+    uCoolCore: new THREE.Color(0.3, 0.9, 0.65),        // 薄荷绿
+    uCoolEdge: new THREE.Color(0.1, 0.45, 0.3),        // 深薄荷
+    uWarmCore: new THREE.Color(0.5, 1.0, 0.8),         // 亮薄荷
+    uWarmEdge: new THREE.Color(0.25, 0.7, 0.5),        // 中薄荷
+    uRippleColor: new THREE.Color(0.4, 1.0, 0.7),
+    uPeakColor: new THREE.Color(1.0, 0.3, 0.55),       // 玫红 - 互补色
+    uGlowIntensity: 1.2,
   },
 };

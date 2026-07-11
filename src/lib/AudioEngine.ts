@@ -43,19 +43,21 @@ export class TriggerConfig {
       this.enabled = true;
       this.mode = 'Auto Beat';
       if (action === 'Pulse') {
-          // Pulse: target sub-bass to low-mid range (~0-516 Hz)
-          this.bandStart = 0;
-          this.bandEnd = 12;
-          this.sensitivity = 0.22;
-          this.cooldown = 45;
-          this.pulseStrength = 0.25;
+          // Pulse: target bass range for beat detection (~130-690 Hz)
+      // 避开次低音，聚焦低频节拍区
+          this.bandStart = 3;
+          this.bandEnd = 16;
+          this.sensitivity = 0.20;
+          this.cooldown = 40;
+          this.pulseStrength = 0.28;
       } else if (action === 'Meteor') {
-          // Meteor: target high and very high frequencies (~4000-15000 Hz)
-          this.bandStart = 92;
-          this.bandEnd = 340;
-          this.sensitivity = 0.40;
-          this.cooldown = 180;
-          this.pulseStrength = 0.50;
+          // Meteor: target high frequency bursts (~6500-10300 Hz)
+      // 聚焦高频爆点区，避开中高频
+      this.bandStart = 150;
+      this.bandEnd = 240;
+      this.sensitivity = 0.35;
+      this.cooldown = 150;
+      this.pulseStrength = 0.55;
       }
   }
 
@@ -131,7 +133,9 @@ export class AudioEngine {
 
       // Auto Beat Evaluation
       if (config.mode === 'Auto Beat') {
-         config.smoothedFlux += (fluxScore - config.smoothedFlux) * 0.4;
+         // 帧率无关的平滑系数
+         const fluxSmoothDt = 1 - Math.pow(1 - 0.4, deltaTime * 60);
+         config.smoothedFlux += (fluxScore - config.smoothedFlux) * fluxSmoothDt;
          config.fluxHistory[config.fluxHistoryIndex] = config.smoothedFlux;
          config.fluxHistoryIndex = (config.fluxHistoryIndex + 1) % config.fluxHistory.length;
 
@@ -229,15 +233,15 @@ export class AudioEngine {
 
       this.prevData[i] = val;
 
-      // Frequency bands
-      if (i <= 4) subBassSum += val;
-      else if (i <= 12) bassSum += val;
-      else if (i <= 24) lowMidSum += val;
-      else if (i <= 45) midSum += val;
-      else if (i <= 81) highMidSum += val;
-      else if (i <= 120) presenceSum += val;
-      else if (i <= 180) brillianceSum += val;
-      else if (i <= 255) airSum += val;
+      // Frequency bands (optimized for visual effects)
+      if (i <= 6) subBassSum += val;         // 0-258 Hz: 中心凸起
+      else if (i <= 18) bassSum += val;      // 86-775 Hz: 中部环形
+      else if (i <= 35) lowMidSum += val;    // 129-1507 Hz: 全地图流动
+      else if (i <= 60) midSum += val;       // 154-2584 Hz: 河流对角线
+      else if (i <= 95) highMidSum += val;   // 2627-4093 Hz: 边缘尖刺
+      else if (i <= 145) presenceSum += val;// 4136-6249 Hz: 顶面闪烁
+      else if (i <= 210) brillianceSum += val;// 6290-9048 Hz: 边缘火花
+      else if (i <= 300) airSum += val;      // 9101-12925 Hz: 静止闪烁
     }
 
     const energy = energySum / binCount;
@@ -254,19 +258,19 @@ export class AudioEngine {
     this.evaluateTrigger(this.meteorTrigger, fluxMeteor, wallpaperData, deltaTime);
 
     // Average amplitudes per band
-    const subBass = subBassSum / 5;
-    const bass = bassSum / 9;
-    const lowMid = lowMidSum / 13;
-    const mid = midSum / 21;
-    const highMid = highMidSum / 37;
-    const presence = presenceSum / 40;
-    const brilliance = brillianceSum / 61;
-    const air = airSum / 76;
+    const subBass = subBassSum / 7;        // bins 0-6
+    const bass = bassSum / 12;             // bins 7-18
+    const lowMid = lowMidSum / 17;         // bins 19-35
+    const mid = midSum / 25;                // bins 36-60
+    const highMid = highMidSum / 35;       // bins 61-95
+    const presence = presenceSum / 50;     // bins 96-145
+    const brilliance = brillianceSum / 65; // bins 146-210
+    const air = airSum / 90;               // bins 211-300
 
     // Legacy mapping for compatibility
-    const oldBass = (subBassSum + bassSum + lowMidSum) / 27;
-    const oldMid = (midSum + highMidSum) / 58;
-    const oldTreble = (presenceSum + brillianceSum + airSum) / 177;
+    const oldBass = (subBassSum + bassSum + lowMidSum) / 36;  // bins 0-35
+    const oldMid = (midSum + highMidSum) / 60;                // bins 36-95
+    const oldTreble = (presenceSum + brillianceSum + airSum) / 205; // bins 96-300
 
     // Timbral Metrics
     const warmth = energySum > 0 ? (subBassSum + bassSum + lowMidSum + midSum) / energySum : 0;
@@ -294,13 +298,15 @@ export class AudioEngine {
     // 帧率无关的平滑系数（参考 60fps）
     const baseFactor = energySum > 0 ? 0.15 : 0.08;
     const dt = 1 - Math.pow(1 - baseFactor, deltaTime * 60);
+    // subBass 只有 7 个 FFT bins (0-258 Hz)，原始信号噪声大，额外平滑
+    const subDt = 1 - Math.pow(1 - baseFactor * 0.5, deltaTime * 60);
 
     this.smoothedData.bass += (oldBass - this.smoothedData.bass) * dt;
     this.smoothedData.mid += (oldMid - this.smoothedData.mid) * dt;
     this.smoothedData.treble += (oldTreble - this.smoothedData.treble) * dt;
     this.smoothedData.energy += (energy - this.smoothedData.energy) * dt;
 
-    this.smoothedData.subBass += (subBass - this.smoothedData.subBass) * dt;
+    this.smoothedData.subBass += (subBass - this.smoothedData.subBass) * subDt;
     this.smoothedData.lowMid += (lowMid - this.smoothedData.lowMid) * dt;
     this.smoothedData.highMid += (highMid - this.smoothedData.highMid) * dt;
     this.smoothedData.presence += (presence - this.smoothedData.presence) * dt;
