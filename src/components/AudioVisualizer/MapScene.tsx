@@ -35,6 +35,22 @@ export const MapScene = forwardRef<MapSceneHandle, MapSceneProps>(({ theme = 'no
   // 自动旋转角度追踪
   const autoRotateAngleRef = useRef(cameraAngleX);
 
+  // 逻辑帧参数 ref：存储最新的动态参数，避免 useEffect 频繁重建
+  const logicParamsRef = useRef({
+    autoRotateEnabled,
+    autoRotateSpeed,
+    cameraAngleY,
+    cameraDistance,
+  });
+
+  // 同步最新参数到 ref
+  useEffect(() => {
+    logicParamsRef.current.autoRotateEnabled = autoRotateEnabled;
+    logicParamsRef.current.autoRotateSpeed = autoRotateSpeed;
+    logicParamsRef.current.cameraAngleY = cameraAngleY;
+    logicParamsRef.current.cameraDistance = cameraDistance;
+  }, [autoRotateEnabled, autoRotateSpeed, cameraAngleY, cameraDistance]);
+
   // 复用 Color 对象避免每帧 GC
   const _tempColor = useMemo(() => new THREE.Color(), []);
   const _whiteColor = useMemo(() => new THREE.Color(0xffffff), []);
@@ -82,7 +98,7 @@ export const MapScene = forwardRef<MapSceneHandle, MapSceneProps>(({ theme = 'no
   })));
   const rippleIndex = useRef(0);
 
-  const addRipple = (x: number, y: number, strength: number, isWhite: boolean = false) => {
+  const addRipple = useCallback((x: number, y: number, strength: number, isWhite: boolean = false) => {
     const idx = rippleIndex.current;
     ripplesRef.current[idx] = {
       pos: new THREE.Vector2(x, y),
@@ -92,7 +108,7 @@ export const MapScene = forwardRef<MapSceneHandle, MapSceneProps>(({ theme = 'no
       rippleType: isWhite ? 1 : 0
     } as any;
     rippleIndex.current = (idx + 1) % 20;
-  };
+  }, [clock]);
 
   const fogRef = useRef<THREE.Fog>(null);
   
@@ -112,7 +128,7 @@ export const MapScene = forwardRef<MapSceneHandle, MapSceneProps>(({ theme = 'no
     life: 0, maxLife: 1, scale: 1
   })));
   const particleIndex = useRef(0);
-  const spawnParticle = (x: number, y: number, z: number, speedMultiplier: number) => {
+  const spawnParticle = useCallback((x: number, y: number, z: number, speedMultiplier: number) => {
      const idx = particleIndex.current;
      const p = particlesRef.current[idx];
      p.active = true;
@@ -126,7 +142,7 @@ export const MapScene = forwardRef<MapSceneHandle, MapSceneProps>(({ theme = 'no
      p.maxLife = 0.5 + Math.random() * 0.5;
      p.scale = Math.random() * 0.6 + 0.2;
      particleIndex.current = (idx + 1) % MAX_PARTICLES;
-  };
+  }, [MAX_PARTICLES]);
   
   const dummyMatrix = useMemo(() => new THREE.Matrix4(), []);
   const dummyPosition = useMemo(() => new THREE.Vector3(), []);
@@ -249,11 +265,14 @@ export const MapScene = forwardRef<MapSceneHandle, MapSceneProps>(({ theme = 'no
   }, [camera]);
 
   useEffect(() => {
-    // 自动旋转启用时，同步初始角度到 ref
-    if (autoRotateEnabled) {
+    // 自动旋转未启用时，始终将 cameraAngleX 同步到 ref，确保启用旋转时从当前角度开始
+    if (!autoRotateEnabled) {
       autoRotateAngleRef.current = cameraAngleX;
     }
-    updateCameraPosition(cameraAngleX, cameraAngleY, cameraDistance);
+    // 自动旋转未启用时，由 prop 控制相机位置；启用时由逻辑帧控制
+    if (!autoRotateEnabled) {
+      updateCameraPosition(cameraAngleX, cameraAngleY, cameraDistance);
+    }
   }, [cameraAngleX, cameraAngleY, cameraDistance, autoRotateEnabled, updateCameraPosition]);
 
   // 逻辑帧缓冲区：逻辑帧写入，渲染帧读取
@@ -309,17 +328,18 @@ export const MapScene = forwardRef<MapSceneHandle, MapSceneProps>(({ theme = 'no
         }
       }
 
-      // 自动旋转
-      if (autoRotateEnabled) {
-        autoRotateAngleRef.current = (autoRotateAngleRef.current + autoRotateSpeed * dt) % 360;
-        updateCameraPosition(autoRotateAngleRef.current, cameraAngleY, cameraDistance);
+      // 自动旋转 - 从 ref 读取最新参数
+      const params = logicParamsRef.current;
+      if (params.autoRotateEnabled) {
+        autoRotateAngleRef.current = (autoRotateAngleRef.current + params.autoRotateSpeed * dt) % 360;
+        updateCameraPosition(autoRotateAngleRef.current, params.cameraAngleY, params.cameraDistance);
       }
     };
 
     const interval = setInterval(tick, 1000 / LOGIC_FPS);
     tick();
     return () => clearInterval(interval);
-  }, [MAX_METEORS, MAX_PARTICLES, autoRotateEnabled, autoRotateSpeed, cameraAngleY, cameraDistance, updateCameraPosition, addRipple, spawnParticle]);
+  }, [MAX_METEORS, MAX_PARTICLES, addRipple, spawnParticle, updateCameraPosition]);
 
   /* 渲染帧：按 fpsLimit 频率，只传递 uniform + 更新矩阵 */
   useFrame((state) => {

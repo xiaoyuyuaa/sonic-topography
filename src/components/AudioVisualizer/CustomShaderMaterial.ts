@@ -104,14 +104,14 @@ export const MapShaderMaterial = shaderMaterial(
       return fract(sin(dot(st.xy, vec2(12.9898,78.233))) * 43758.5453123);
     }
 
-    // Eased lift: ease-out-quad 主体 + 单峰弹跳过冲，峰值附近有明显跃动感
+    // Eased lift: ease-out with slower, smoother animation
     float easeLift(float raw, float maxHeight) {
       float x = clamp(raw, 0.0, 1.0);
-      // 主体：ease-out-quad 快速上升
-      float eased = 1.0 - pow(1.0 - x, 2.0);
-      // 跃动感：sin(πx) 单峰始终为正，pow(x,2) 让弹跳集中在峰值附近
-      float bounce = sin(x * 3.14159) * pow(x, 2.0) * 0.35;
-      return (eased + bounce) * maxHeight;
+      // 使用更高的指数让动画更慢、更平滑
+      float eased = 1.0 - pow(1.0 - x, 3.0);
+      // 减少过冲效果，让中间凸起更稳定
+      float overshoot = sin(x * 6.283 * 1.5) * exp(-x * 4.0) * 0.05;
+      return (eased + overshoot) * maxHeight;
     }
 
     // Flow lift: quick initial response, soft peak with gentle pulsing mid-energy
