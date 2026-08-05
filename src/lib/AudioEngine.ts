@@ -295,17 +295,15 @@ export class AudioEngine {
 
     const spectralCentroid = centroidDen > 0 ? centroidNum / centroidDen : 0;
 
-    // 调整平滑系数，让动画速度更慢、更平缓
-    const dt = energySum > 0 ? 0.12 : 0.06;
-    // subBass 额外平滑处理，减少中间凸起的抖动
-    const subDt = energySum > 0 ? 0.10 : 0.05;
+    // 恢复第一版平滑系数
+    const dt = energySum > 0 ? 0.15 : 0.08;
 
     this.smoothedData.bass += (oldBass - this.smoothedData.bass) * dt;
     this.smoothedData.mid += (oldMid - this.smoothedData.mid) * dt;
     this.smoothedData.treble += (oldTreble - this.smoothedData.treble) * dt;
     this.smoothedData.energy += (energy - this.smoothedData.energy) * dt;
 
-    this.smoothedData.subBass += (subBass - this.smoothedData.subBass) * subDt;
+    this.smoothedData.subBass += (subBass - this.smoothedData.subBass) * dt;
     this.smoothedData.lowMid += (lowMid - this.smoothedData.lowMid) * dt;
     this.smoothedData.highMid += (highMid - this.smoothedData.highMid) * dt;
     this.smoothedData.presence += (presence - this.smoothedData.presence) * dt;

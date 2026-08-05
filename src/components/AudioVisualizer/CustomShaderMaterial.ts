@@ -104,13 +104,11 @@ export const MapShaderMaterial = shaderMaterial(
       return fract(sin(dot(st.xy, vec2(12.9898,78.233))) * 43758.5453123);
     }
 
-    // Eased lift: ease-out with slower, smoother animation
+    // Eased lift: ease-out-cubic for smooth rise + subtle elastic overshoot at high energy
     float easeLift(float raw, float maxHeight) {
       float x = clamp(raw, 0.0, 1.0);
-      // 使用更高的指数让动画更慢、更平滑
-      float eased = 1.0 - pow(1.0 - x, 3.0);
-      // 减少过冲效果，让中间凸起更稳定
-      float overshoot = sin(x * 6.283 * 1.5) * exp(-x * 4.0) * 0.05;
+      float eased = 1.0 - pow(1.0 - x, 2.5);
+      float overshoot = sin(x * 6.283 * 1.5) * exp(-x * 4.0) * 0.15;
       return (eased + overshoot) * maxHeight;
     }
 
