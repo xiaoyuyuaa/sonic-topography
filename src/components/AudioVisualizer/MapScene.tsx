@@ -7,6 +7,76 @@ import { AudioData } from '../../types';
 import { themes, ThemeColors } from '../../lib/themes';
 
 extend({ MapShaderMaterial });
+/* ============================================================
+ * GPU 优化：自定义柱子几何 + 半精度顶点
+ * 1) 去掉永远不可见的底面（相机始终在 Y>0，底面法线朝下被背面剔除）
+ *    BoxGeometry 6 面 24 顶点 → 5 面 20 顶点（-17% 顶点数）
+ * 2) position/normal/uv 转半精度 Float16（顶点带宽 -50%，
+ *    局部坐标范围 ±0.5，半精度绝对精度 ~0.0005，视觉不可辨）
+ * 渲染结果与 BoxGeometry 完全一致（底面本来就被剔除，不产生任何像素）
+ * ============================================================ */
+
+// 与 BoxGeometry(w, 1, w) 顶面+侧面完全一致的 5 面柱子（逆时针绕序，从法线方向看）
+function createPillarGeometry(width: number): THREE.BufferGeometry {
+  const hw = width / 2;
+  const hd = width / 2;
+  const hy = 0.5;
+  const positions: number[] = [];
+  const normals: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+
+  const quad = (
+    a: [number, number, number],
+    b: [number, number, number],
+    c: [number, number, number],
+    d: [number, number, number],
+    n: [number, number, number],
+  ) => {
+    const base = positions.length / 3;
+    positions.push(...a, ...b, ...c, ...d);
+    normals.push(...n, ...n, ...n, ...n);
+    uvs.push(0, 0, 1, 0, 1, 1, 0, 1);
+    indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  };
+
+  // 顶面（法线 +y，uv 0-1 平面，供片元着色器边缘发光使用）
+  quad([-hw, hy, -hd], [hw, hy, -hd], [hw, hy, hd], [-hw, hy, hd], [0, 1, 0]);
+  // 侧面 +z
+  quad([-hw, -hy, hd], [hw, -hy, hd], [hw, hy, hd], [-hw, hy, hd], [0, 0, 1]);
+  // 侧面 -z
+  quad([hw, -hy, -hd], [-hw, -hy, -hd], [-hw, hy, -hd], [hw, hy, -hd], [0, 0, -1]);
+  // 侧面 +x
+  quad([hw, -hy, -hd], [hw, -hy, hd], [hw, hy, hd], [hw, hy, -hd], [1, 0, 0]);
+  // 侧面 -x
+  quad([-hw, -hy, hd], [-hw, -hy, -hd], [-hw, hy, -hd], [-hw, hy, hd], [-1, 0, 0]);
+  // 底面已省略（永远不可见）
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
+  geometry.computeBoundingSphere();
+  return geometry;
+}
+
+// position/normal/uv → Float16（顶点属性带宽减半）
+// 注意：three r184 的 Float16BufferAttribute 不自动编码，需手动 toHalfFloat
+function toHalfPrecision(geometry: THREE.BufferGeometry): THREE.BufferGeometry {
+  const attrs = geometry.attributes;
+  for (const key of ['position', 'normal', 'uv']) {
+    const attr = attrs[key] as THREE.BufferAttribute | undefined;
+    if (!attr) continue;
+    const src = attr.array as ArrayLike<number>;
+    const half = new Uint16Array(src.length);
+    for (let i = 0; i < src.length; i++) {
+      half[i] = THREE.DataUtils.toHalfFloat(src[i]);
+    }
+    geometry.setAttribute(key, new THREE.Float16BufferAttribute(half, attr.itemSize));
+  }
+  return geometry;
+}
 
 interface MapSceneProps {
   theme?: string | ThemeColors; // 支持主题名或混合后的主题颜色对象
@@ -68,6 +138,15 @@ export const MapScene = forwardRef<MapSceneHandle, MapSceneProps>(({ theme = 'no
   const pillarWidth = spacing * 0.857;
   const count = gridSize * gridSize;
   const halfExtent = totalRange / 2;
+
+  // 优化几何：去底面 + 半精度顶点（渲染结果与 boxGeometry 一致，GPU 顶点负载显著下降）
+  const pillarGeometry = useMemo(
+    () => toHalfPrecision(createPillarGeometry(pillarWidth)),
+    [pillarWidth],
+  );
+  useEffect(() => {
+    return () => pillarGeometry.dispose();
+  }, [pillarGeometry]);
 
   useLayoutEffect(() => {
     if (!meshRef.current) return;
@@ -445,7 +524,7 @@ export const MapScene = forwardRef<MapSceneHandle, MapSceneProps>(({ theme = 'no
         key={gridSize}
         args={[undefined, undefined, count]}
       >
-        <boxGeometry args={[pillarWidth, 1, pillarWidth]} />
+        <primitive object={pillarGeometry} attach="geometry" />
         {/* @ts-ignore */}
         <mapShaderMaterial ref={materialRef} transparent={true} depthWrite={true} />
       </instancedMesh>

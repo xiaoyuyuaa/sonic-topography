@@ -36,3 +36,7 @@ pnpm-debug.log*
 # Misc
 data/
 docs/
+backups/
+
+# Local tool state
+.superpowers/

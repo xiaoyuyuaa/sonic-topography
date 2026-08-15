@@ -6,7 +6,28 @@ import * as THREE from 'three';
 import { MapScene } from '../src/components/AudioVisualizer/MapScene';
 import { themes, themeIds, lerpThemes, ThemeColors } from '../src/lib/themes';
 import { engine } from '../src/lib/AudioEngine';
+import { fetchWeather, WeatherInfo } from '../src/lib/weather';
 import '../src/index.css';
+
+/* Wallpaper Engine Media Integration 全局类型声明（index.html 内联脚本注入，纯类型、无运行时影响） */
+declare global {
+  interface MediaState {
+    title: string;
+    artist: string;
+    thumbnail: string;
+    primaryColor: string;
+    textColor: string;
+    isPlaying: boolean;
+    position: number;
+    duration: number;
+  }
+  interface Window {
+    __mediaState: MediaState & { _callbacks: ((state: MediaState) => void)[] };
+  }
+}
+
+/* 中文星期 */
+const WEEKDAYS = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
 
 /* Wallpaper Engine 属性监听 - 模块级别缓存，解决加载时序问题 */
 let _pendingProps: WallpaperProperties | null = null;
@@ -80,8 +101,8 @@ function FPSLimiter({ fpsLimit }: { fpsLimit: number }) {
 function WallpaperApp() {
   const defaultCameraDistance = 85;
 
-  // Wallpaper Engine FPS 限制
-  const [fpsLimit, setFpsLimit] = useState(0); // 0 表示无限制
+  // Wallpaper Engine FPS 限制（默认 60 上限：动画观感不变，避免无限制渲染导致 GPU 满载空转；WE 的 fps 属性仍可覆盖）
+  const [fpsLimit, setFpsLimit] = useState(60); // 0 表示无限制
 
   const [themeMode, setThemeMode] = useState<'cycle' | string>('nocturnal'); // 'cycle' 或具体主题名
   const [cameraDistance, setCameraDistance] = useState(defaultCameraDistance);
@@ -92,7 +113,7 @@ function WallpaperApp() {
   const [idleWaveEnabled, setIdleWaveEnabled] = useState(true);
   const [showPlayerController, setShowPlayerController] = useState(true);
   const [showAlbumCover, setShowAlbumCover] = useState(true);
-  const [controllerSize, setControllerSize] = useState<'small' | 'medium' | 'large'>('large');
+  const [controllerScale, setControllerScale] = useState(1.0); // 控制器尺寸比例（1.0 = 100%，可在属性中直接输入数值）
   const [controllerX, setControllerX] = useState(2); // 控制器水平位置 (%)
   const [controllerY, setControllerY] = useState(3); // 控制器垂直位置 (%)
   const [audioIntensity, setAudioIntensity] = useState(1);
@@ -103,6 +124,20 @@ function WallpaperApp() {
   const [peakColorIntensity, setPeakColorIntensity] = useState(1.0); // 强调色强度
   const [themeCycleInterval, setThemeCycleInterval] = useState(60); // 默认60秒
   const mapSceneRef = useRef<any>(null);
+
+  /* 时钟模块状态 */
+  const [showClock, setShowClock] = useState(true);
+  const [clockPosX, setClockPosX] = useState(50); // 水平位置 (%)
+  const [clockPosY, setClockPosY] = useState(10); // 垂直位置 (%)
+  const [clockSize, setClockSize] = useState(56); // 字号 (px)
+  const [clock24Hour, setClock24Hour] = useState(true); // 12/24 小时制
+  const [clockText, setClockText] = useState('');
+  const [clockSuffix, setClockSuffix] = useState('');
+  const [dateText, setDateText] = useState('');
+  /* 天气模块状态（Open-Meteo 免费 API，无需 key；城市留空时尝试 IP 定位） */
+  const [weatherEnabled, setWeatherEnabled] = useState(true);
+  const [weatherCity, setWeatherCity] = useState('');
+  const [weatherData, setWeatherData] = useState<WeatherInfo | null>(null);
   
   /* 主题轮询过渡状态 */
   const [cycleProgress, setCycleProgress] = useState(0); // 0-1 之间的过渡进度
@@ -217,7 +252,11 @@ const [mediaDuration, setMediaDuration] = useState(initialMedia.duration);
       setShowAlbumCover(properties.showAlbumCover.value as boolean);
     }
     if (properties.controllerSize?.value !== undefined) {
-      setControllerSize(properties.controllerSize.value as 'small' | 'medium' | 'large');
+      const v = Number(properties.controllerSize.value);
+      if (isFinite(v) && v > 0) {
+        // 限制在安全范围 0.5x ~ 3x，避免输入异常值导致布局错乱
+        setControllerScale(Math.min(Math.max(v, 0.5), 3.0));
+      }
     }
     if (properties.controllerX?.value !== undefined) {
       setControllerX(properties.controllerX.value as number);
@@ -245,6 +284,29 @@ const [mediaDuration, setMediaDuration] = useState(initialMedia.duration);
     }
     if (properties.themeCycleInterval?.value !== undefined) {
       setThemeCycleInterval(properties.themeCycleInterval.value as number);
+    }
+    /* 时钟属性 */
+    if (properties.showClock?.value !== undefined) {
+      setShowClock(properties.showClock.value as boolean);
+    }
+    if (properties.clockPosX?.value !== undefined) {
+      setClockPosX(properties.clockPosX.value as number);
+    }
+    if (properties.clockPosY?.value !== undefined) {
+      setClockPosY(properties.clockPosY.value as number);
+    }
+    if (properties.clockSize?.value !== undefined) {
+      setClockSize(properties.clockSize.value as number);
+    }
+    if (properties.clock24Hour?.value !== undefined) {
+      setClock24Hour(properties.clock24Hour.value as boolean);
+    }
+    /* 天气属性 */
+    if (properties.weatherEnabled?.value !== undefined) {
+      setWeatherEnabled(properties.weatherEnabled.value as boolean);
+    }
+    if (properties.weatherCity?.value !== undefined) {
+      setWeatherCity(String(properties.weatherCity.value).trim());
     }
   }, []);
 
@@ -396,17 +458,67 @@ const [mediaDuration, setMediaDuration] = useState(initialMedia.duration);
     return () => clearInterval(interval);
   }, [isMediaPlaying, mediaDuration]);
 
-  /* 播放器尺寸配置 */
+  /* 时钟：1s 更新一次，含秒、日期，支持 12/24 小时制 */
+  useEffect(() => {
+    const update = () => {
+      const d = new Date();
+      let h = d.getHours();
+      let suffix = '';
+      if (!clock24Hour) {
+        suffix = h >= 12 ? 'PM' : 'AM';
+        h = h % 12 || 12;
+      }
+      const main = String(h).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') + ':' + String(d.getSeconds()).padStart(2, '0');
+      setClockText((prev) => (prev === main ? prev : main));
+      setClockSuffix((prev) => (prev === suffix ? prev : suffix));
+      const dateStr = d.getFullYear() + '年' + (d.getMonth() + 1) + '月' + d.getDate() + '日 ' + WEEKDAYS[d.getDay()];
+      setDateText((prev) => (prev === dateStr ? prev : dateStr));
+    };
+    update();
+    const iv = setInterval(update, 1000);
+    return () => clearInterval(iv);
+  }, [clock24Hour]);
+
+  /* 天气：立即获取 + 每 15 分钟刷新；城市变化时重新获取 */
+  useEffect(() => {
+    if (!weatherEnabled) {
+      setWeatherData(null);
+      return;
+    }
+    let cancelled = false;
+    const load = async () => {
+      const w = await fetchWeather(weatherCity);
+      if (!cancelled) setWeatherData(w);
+    };
+    load();
+    const iv = setInterval(load, 15 * 60 * 1000);
+    return () => {
+      cancelled = true;
+      clearInterval(iv);
+    };
+  }, [weatherEnabled, weatherCity]);
+
+  /* 播放器尺寸配置：以原 "large" 档为基准，按比例缩放（controllerScale = 1.0 即原大号） */
   const sizes = {
-    small: { width: 300, cover: 76, padding: 14, gap: 12, title: 14, artist: 11, progressHeight: 4, timeText: 9.5 },
-    medium: { width: 360, cover: 92, padding: 16, gap: 14, title: 15.5, artist: 12, progressHeight: 4.5, timeText: 10 },
-    large: { width: 420, cover: 110, padding: 20, gap: 18, title: 18, artist: 13.5, progressHeight: 5, timeText: 11 },
-  }[controllerSize];
+    width: 420 * controllerScale,
+    cover: 110 * controllerScale,
+    padding: 20 * controllerScale,
+    gap: 18 * controllerScale,
+    title: 18 * controllerScale,
+    artist: 13.5 * controllerScale,
+    progressHeight: 5 * controllerScale,
+    timeText: 11 * controllerScale,
+  };
 
   return (
     <div className="w-screen h-screen overflow-hidden" style={{ backgroundColor: bgColor }} onClick={handleRootClick}>
       <div className="absolute inset-0 z-0">
-        <Canvas camera={{ position: [35, 25, 35], fov: 45 }} frameloop="demand">
+        <Canvas
+          camera={{ position: [35, 25, 35], fov: 45 }}
+          frameloop="demand"
+          // 限制 DPR 上限，避免高分屏超采样浪费像素填充（原生分辨率渲染，画面不变）
+          dpr={[1, 1.5]}
+        >
           <FPSLimiter fpsLimit={fpsLimit} />
           <MapScene
             ref={mapSceneRef}
@@ -594,7 +706,7 @@ const [mediaDuration, setMediaDuration] = useState(initialMedia.duration);
                         color: 'rgba(255,255,255,0.30)',
                         fontVariantNumeric: 'tabular-nums',
                         fontSize: `${sizes.timeText}px`,
-                        minWidth: '50px',
+                        minWidth: `${50 * controllerScale}px`,
                         textAlign: 'right',
                         lineHeight: 1,
                         letterSpacing: '0.03em',
@@ -607,6 +719,87 @@ const [mediaDuration, setMediaDuration] = useState(initialMedia.duration);
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* 时钟模块：可自定义位置/大小/12-24制，颜色随壁纸主题（accentColor）变化，Win11 Segoe UI Variable 字体 */}
+      {showClock && clockText && (
+        <div
+          className="absolute z-30 select-none"
+          style={{
+            left: clockPosX + '%',
+            top: clockPosY + '%',
+            transform: 'translate(-50%, -50%)',
+            pointerEvents: 'none',
+            textAlign: 'center',
+          }}
+        >
+          <div
+            style={{
+              fontFamily: "'Segoe UI Variable Display','Segoe UI Variable Text','Segoe UI',system-ui,sans-serif",
+              fontWeight: 600,
+              fontSize: clockSize,
+              lineHeight: 1,
+              color: accentColor,
+              fontVariantNumeric: 'tabular-nums',
+              letterSpacing: '0.02em',
+              textShadow: '0 2px 14px rgba(0,0,0,0.65), 0 0 3px rgba(0,0,0,0.45)',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {clockText}
+            {clockSuffix && (
+              <span
+                style={{
+                  fontSize: clockSize * 0.32,
+                  fontWeight: 500,
+                  opacity: 0.8,
+                  marginLeft: clockSize * 0.1,
+                  letterSpacing: '0.1em',
+                  verticalAlign: '0.6em',
+                }}
+              >
+                {clockSuffix}
+              </span>
+            )}
+          </div>
+          {/* 日期 */}
+          {dateText && (
+            <div
+              style={{
+                marginTop: Math.max(6, clockSize * 0.12),
+                fontFamily: "'Segoe UI Variable','Segoe UI','Microsoft YaHei UI',sans-serif",
+                fontWeight: 400,
+                fontSize: clockSize * 0.24,
+                lineHeight: 1.2,
+                color: 'rgba(255,255,255,0.75)',
+                letterSpacing: '0.06em',
+                textShadow: '0 1px 8px rgba(0,0,0,0.7)',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {dateText}
+            </div>
+          )}
+          {/* 实时天气 */}
+          {weatherEnabled && weatherData && (
+            <div
+              style={{
+                marginTop: Math.max(4, clockSize * 0.08),
+                fontFamily: "'Segoe UI Variable','Segoe UI','Microsoft YaHei UI',sans-serif",
+                fontWeight: 500,
+                fontSize: clockSize * 0.2,
+                lineHeight: 1.2,
+                color: accentColor,
+                letterSpacing: '0.04em',
+                textShadow: '0 1px 8px rgba(0,0,0,0.7)',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {weatherData.icon} {weatherData.desc} {Math.round(weatherData.temp)}°C
+              {weatherData.city ? ' · ' + weatherData.city : ''}
+            </div>
+          )}
         </div>
       )}
     </div>

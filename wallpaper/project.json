@@ -403,15 +403,12 @@
 			{
 				"index" : 2,
 				"order" : 802,
-				"text" : "控制器尺寸 / Controller Size",
-				"type" : "combo",
-				"value" : "large",
-				"options" :
-				[
-					{ "label" : "小 / Small", "value" : "small" },
-					{ "label" : "中 / Medium", "value" : "medium" },
-					{ "label" : "大 / Large", "value" : "large" }
-				]
+				"text" : "控制器尺寸比例 / Controller Size Scale (1.0 = 100%)",
+				"type" : "slider",
+				"value" : 1.0,
+				"min" : 0.5,
+				"max" : 3.0,
+				"step" : 0.05
 			},
 			"controllerX" :
 			{
@@ -434,6 +431,86 @@
 				"min" : 0,
 				"max" : 90,
 				"step" : 1
+			},
+
+			"sep_clock" :
+			{
+				"order" : 997,
+				"text" : " ",
+				"type" : "text",
+				"value" : ""
+			},
+			"sep_clock_title" :
+			{
+				"order" : 998,
+				"text" : "===时钟 / Clock===",
+				"type" : "text",
+				"value" : ""
+			},
+			"showClock" :
+			{
+				"index" : 0,
+				"order" : 1000,
+				"text" : "显示时钟 / Show Clock",
+				"type" : "bool",
+				"value" : true
+			},
+			"clockPosX" :
+			{
+				"index" : 1,
+				"order" : 1001,
+				"text" : "时钟水平位置 (%) / Clock X (%)",
+				"type" : "slider",
+				"value" : 50,
+				"min" : 0,
+				"max" : 100,
+				"step" : 1
+			},
+			"clockPosY" :
+			{
+				"index" : 2,
+				"order" : 1002,
+				"text" : "时钟垂直位置 (%) / Clock Y (%)",
+				"type" : "slider",
+				"value" : 10,
+				"min" : 0,
+				"max" : 100,
+				"step" : 1
+			},
+			"clockSize" :
+			{
+				"index" : 3,
+				"order" : 1003,
+				"text" : "时钟字号 / Clock Size",
+				"type" : "slider",
+				"value" : 56,
+				"min" : 24,
+				"max" : 120,
+				"step" : 2
+			},
+			"clock24Hour" :
+			{
+				"index" : 4,
+				"order" : 1004,
+				"text" : "24小时制 / 24-Hour Format",
+				"type" : "bool",
+				"value" : true
+			},
+			"weatherEnabled" :
+			{
+				"index" : 5,
+				"order" : 1005,
+				"text" : "显示实时天气 / Show Weather",
+				"type" : "bool",
+				"value" : true
+			},
+			"weatherCity" :
+			{
+				"index" : 6,
+				"order" : 1006,
+				"text" : "天气城市 (留空自动定位) / Weather City (empty = auto)",
+				"type" : "text",
+				"value" : ""
 			}
 		},
 		"supportsaudioprocessing" : true
